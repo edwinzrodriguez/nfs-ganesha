@@ -133,6 +133,7 @@
 #cmakedefine USE_PRIO_INHERIT 1
 #cmakedefine LEGACY_METRICS 1
 #define NFS_GANESHA 1
+#define HAVE_LIBBACKTRACE 1
 
 #define GANESHA_CONFIG_PATH "@SYSCONFDIR@/ganesha/ganesha.conf"
 #define GANESHA_PIDFILE_PATH "@RUNTIMEDIR@/ganesha.pid"
