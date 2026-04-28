@@ -452,6 +452,9 @@ goption(CEPHFS_POSIX_ACL "Enable CephFS POSIX ACL" ON)
 # Enable NFSv4 and POSIX acls mapping
 option(USE_ACL_MAPPING "Build NFSv4 to POSIX ACL mapping" OFF)
 
+# Enable tracing
+option(USE_TRACEFLOW "build with traceflow" OFF)
+
 #
 # End build options
 #
@@ -1289,6 +1292,22 @@ if(USE_9P_RDMA)
   link_directories (${MOOSHIKA_LIBRARY_DIRS})
 endif(USE_9P_RDMA)
 
+if(USE_TRACEFLOW)
+    add_compile_options(
+            -finstrument-functions
+            -finstrument-functions-exclude-function-list=boost,std::,::__,fmt::
+            -fno-omit-frame-pointer
+            -rdynamic
+            -fno-inline
+            -fno-inline-small-functions
+            -fno-ipa-sra
+            -fvisibility=default
+            -fverbose-asm
+            -ggdb3
+    )
+    add_link_options("-Wl,--export-dynamic")
+endif()
+
 set(NTIRPC_MIN_VERSION 5.0)
 if (USE_SYSTEM_NTIRPC)
   find_package(NTIRPC ${NTIRPC_MIN_VERSION} REQUIRED)
@@ -1590,6 +1609,19 @@ endif()
 set(CMAKE_REQUIRED_DEFINITIONS "")
 set(CMAKE_REQUIRED_LIBRARIES "")
 
+set(CMAKE_REQUIRED_LIBRARIES "backtrace")
+check_c_source_compiles("
+    #include <backtrace.h>
+    int main(int argc, char **argv) {
+        return 0;
+    }
+" HAVE_LIBBACKTRACE_WORKS_NOW)
+set(CMAKE_REQUIRED_LIBRARIES "")
+if(HAVE_LIBBACKTRACE_WORKS_NOW)
+    set(HAVE_LIBBACKTRACE 1)
+endif()
+set(CMAKE_REQUIRED_LIBRARIES "")
+
 # Now create a usable config.h
 configure_file(
   "${PROJECT_SOURCE_DIR}/include/config-h.in.cmake"
@@ -1794,6 +1826,7 @@ else(USE_MONITORING)
   set(BCOND_MONITORING "%bcond_with")
 endif(USE_MONITORING)
 
+
 # Now create a usable specfile
 configure_file(
   "${PROJECT_SOURCE_DIR}/nfs-ganesha.spec-in.cmake"
@@ -1861,7 +1894,15 @@ target_link_libraries(ganesha.nfsd
 if (USE_MONITORING)
   target_link_libraries(ganesha.nfsd ganesha_monitoring)
 endif (USE_MONITORING)
+if(USE_TRACEFLOW)
+    target_link_libraries(ganesha.nfsd traceflow)
+    if(HAVE_LIBBACKTRACE_WORKS_NOW)
+        target_link_libraries(ganesha.nfsd backtrace)
+    endif()
+endif()
+
 set_target_properties(ganesha.nfsd PROPERTIES COMPILE_FLAGS "-fPIC")
+set_target_properties(ganesha.nfsd PROPERTIES INSTALL_RPATH "${FSAL_DESTINATION};${LIB_INSTALL_DIR}")
 install(TARGETS ganesha.nfsd COMPONENT daemon DESTINATION bin)
 
 ########### next target ###############

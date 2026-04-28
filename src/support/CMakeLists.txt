@@ -121,4 +121,12 @@ if (USE_LTTNG)
 add_dependencies(support gsh_trace_header_generate)
 endif (USE_LTTNG)
 
+if(USE_TRACEFLOW)
+  add_library(traceflow SHARED traceflow.cc)
+  if(HAVE_LIBBACKTRACE_WORKS_NOW)
+    target_link_libraries(traceflow backtrace)
+  endif()
+  install(TARGETS traceflow COMPONENT daemon DESTINATION ${LIB_INSTALL_DIR})
+endif()
+
 ########### install files ###############
