@@ -83,6 +83,7 @@
 #cmakedefine HAVE_STRNLEN 1
 #cmakedefine LITTLEEND 1
 #cmakedefine HAVE_DAEMON 1
+#cmakedefine HAVE_PTHREAD_SETNAME_NP 1
 #cmakedefine USE_LTTNG 1
 #cmakedefine HAVE_ACL_GET_FD_NP 1
 #cmakedefine HAVE_ACL_SET_FD_NP 1

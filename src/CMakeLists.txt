@@ -1562,6 +1562,33 @@ set(USE_ACL_MAPPING ${USE_ACL_MAPPING}
   "Build NFSv4 to POSIX ACL mapping"
   FORCE)
 
+set(CMAKE_REQUIRED_DEFINITIONS -D_GNU_SOURCE)
+if(LINUX)
+    list(APPEND CMAKE_REQUIRED_DEFINITIONS -DLINUX)
+elseif(FREEBSD)
+    list(APPEND CMAKE_REQUIRED_DEFINITIONS -DFREEBSD)
+elseif(DARWIN)
+    list(APPEND CMAKE_REQUIRED_DEFINITIONS -DDARWIN)
+endif()
+set(CMAKE_REQUIRED_LIBRARIES pthread)
+check_c_source_compiles("
+    #include <pthread.h>
+    int main(int argc, char **argv) {
+    #if defined(LINUX)
+        pthread_setname_np(pthread_self(), \"test\");
+    #elif defined(FREEBSD) || defined(DARWIN)
+            pthread_setname_np(\"test\");
+    #else
+    #error pthread_setname_np unavailable
+    #endif
+        return 0;
+    }
+" HAVE_PTHREAD_SETNAME_NP_WORKS_NOW)
+if(HAVE_PTHREAD_SETNAME_NP_WORKS_NOW)
+    set(HAVE_PTHREAD_SETNAME_NP 1)
+endif()
+set(CMAKE_REQUIRED_DEFINITIONS "")
+set(CMAKE_REQUIRED_LIBRARIES "")
 
 # Now create a usable config.h
 configure_file(

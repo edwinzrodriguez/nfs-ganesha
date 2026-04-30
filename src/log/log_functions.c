@@ -475,6 +475,13 @@ void SetNameFunction(const char *nom)
 			"Thread name %s too long truncated to %s", nom,
 			thread_name);
 	}
+#ifdef HAVE_PTHREAD_SETNAME_NP
+#if defined(LINUX)
+	pthread_setname_np(pthread_self(), thread_name);
+#elif defined(FREEBSD) || defined(DARWIN)
+	pthread_setname_np(thread_name);
+#endif
+#endif
 	clientip = NULL;
 }
 
