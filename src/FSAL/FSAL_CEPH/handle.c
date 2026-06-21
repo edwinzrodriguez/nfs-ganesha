@@ -2090,6 +2090,12 @@ void ceph_write2_cb(struct ceph_ll_io_info *cb_info)
 		container_of(cbi->obj_hdl, struct ceph_handle, handle);
 	struct req_op_context ctx;
 
+	LogFullDebug(COMPONENT_FSAL,
+		     "io_correl callback write caller_arg=%p cbi=%p io_info=%p "
+		     "fileid=%" PRIu64 " offset=%" PRIu64 " result=%" PRId64,
+		     cbi->caller_arg, cbi, cb_info, obj_hdl->fileid,
+		     write_arg->offset, (int64_t)cb_info->result);
+
 	/* Take a reference to the export for the callback. Note that while
 	 * this looks unsafe, we know that the caller's request can not complete
 	 * without this callback occurring, and since it can not complete, its
@@ -2137,6 +2143,11 @@ void ceph_write2_cb(struct ceph_ll_io_info *cb_info)
 resume:
 
 	status2 = fsal_complete_io(obj_hdl, &cbi->my_fd->fsal_fd);
+
+	LogFullDebug(COMPONENT_FSAL,
+		     "io_correl callback write fsal_complete_io caller_arg=%p "
+		     "cbi=%p status=%s",
+		     cbi->caller_arg, cbi, fsal_err_txt(status2));
 
 	LogFullDebug(COMPONENT_FSAL, "fsal_complete_io returned %s",
 		     fsal_err_txt(status2));
@@ -2268,6 +2279,12 @@ static void ceph_fsal_write2(struct fsal_obj_handle *obj_hdl, bool bypass,
 	 */
 
 	LogFullDebug(COMPONENT_FSAL,
+		     "io_correl submit write caller_arg=%p cbi=%p io_info=%p "
+		     "fileid=%" PRIu64 " offset=%" PRIu64 " fsync=%d",
+		     caller_arg, cbi, &cbi->io_info, obj_hdl->fileid, offset,
+		     write_arg->fsal_stable);
+
+	LogFullDebug(COMPONENT_FSAL,
 		     "Calling ceph_ll_nonblocking_readv_writev for write");
 
 	result =
@@ -2275,8 +2292,9 @@ static void ceph_fsal_write2(struct fsal_obj_handle *obj_hdl, bool bypass,
 
 	LogFullDebug(
 		COMPONENT_FSAL,
-		"ceph_ll_nonblocking_readv_writev for write returned %" PRIi64,
-		result);
+		"io_correl submit write returned caller_arg=%p cbi=%p result=%"
+		PRIi64,
+		caller_arg, cbi, result);
 
 	if (result < 0) {
 		/* An error occurred. */

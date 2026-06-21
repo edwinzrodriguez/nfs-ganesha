@@ -123,6 +123,12 @@ static void nfs4_write_cb(struct fsal_obj_handle *obj, fsal_status_t ret,
 	struct nfs4_write_data *data = caller_data;
 	uint32_t flags;
 
+	LogFullDebug(COMPONENT_NFS_V4,
+		     "io_correl nfs4_write_cb write_data=%p fileid=%" PRIu64
+		     " io_amount=%" PRIu64 " status=%d",
+		     data, obj->fileid, data->write_arg.io_amount,
+		     nfs4_Errno_status(ret));
+
 	/* Fixup ERR_FSAL_SHARE_DENIED status */
 	if (ret.major == ERR_FSAL_SHARE_DENIED)
 		ret = fsalstat(ERR_FSAL_LOCKED, 0);
@@ -557,7 +563,10 @@ enum nfs_req_result nfs4_op_write(struct nfs_argop4 *op, compound_data_t *data,
 
 	/* Set up args, allocate from heap, iov_len will be 1 */
 	write_data = gsh_calloc(1, sizeof(*write_data));
-	LogFullDebug(COMPONENT_NFS_V4, "Allocated write_data %p", write_data);
+	LogFullDebug(COMPONENT_NFS_V4,
+		     "io_correl alloc write_data=%p offset=%" PRIu64
+		     " length=%lu stable=%d",
+		     write_data, offset, size, arg_WRITE4->stable);
 	write_arg = &write_data->write_arg;
 	write_arg->info = NULL;
 	write_arg->state = state_found;
