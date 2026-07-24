@@ -2289,7 +2289,7 @@ static void ceph_fsal_write2(struct fsal_obj_handle *obj_hdl, bool bypass,
 	cbi->io_info.off = offset;
 	cbi->io_info.write = true;
 	cbi->io_info.fsync = write_arg->fsal_stable;
-	cbi->io_info.syncdataonly = false;
+	cbi->io_info.syncdataonly = CephFSM.syncdataonly;
 	cbi->arg = write_arg;
 	cbi->exp = op_ctx->ctx_export;
 	cbi->fsal_export = op_ctx->fsal_export;
@@ -2354,7 +2354,8 @@ old_style:
 	}
 
 	if (write_arg->fsal_stable) {
-		retval = ceph_ll_fsync(export->cmount, my_fd->fd, false);
+		retval = ceph_ll_fsync(export->cmount, my_fd->fd,
+				      CephFSM.syncdataonly);
 
 		if (retval < 0) {
 			status = ceph2fsal_error(retval);

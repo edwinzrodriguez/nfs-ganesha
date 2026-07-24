@@ -95,6 +95,7 @@ struct ceph_fsal_module {
 	bool zerocopy;
 	bool use_old_uuid;
 	bool register_service;
+	bool syncdataonly;
 	char *nodeid;
 	/* client_oc related */
 	bool client_oc;
