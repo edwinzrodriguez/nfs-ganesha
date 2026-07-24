@@ -69,6 +69,7 @@ struct ceph_fsal_module {
 	bool zerocopy;
 	bool use_old_uuid;
 	bool register_service;
+	bool syncdataonly;
 	char *nodeid;
 };
 extern struct ceph_fsal_module CephFSM;

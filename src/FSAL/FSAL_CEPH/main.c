@@ -131,6 +131,7 @@ static struct config_item ceph_items[] = {
 	CONF_ITEM_BOOL("use_old_uuid", false, ceph_fsal_module, use_old_uuid),
 	CONF_ITEM_BOOL("register_service", false, ceph_fsal_module,
 		       register_service),
+	CONF_ITEM_BOOL("syncdataonly", false, ceph_fsal_module, syncdataonly),
 	CONF_ITEM_STR("nodeid", 1, MAXPATHLEN, NULL, ceph_fsal_module, nodeid),
 	CONFIG_EOL
 };
