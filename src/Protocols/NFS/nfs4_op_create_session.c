@@ -426,6 +426,11 @@ enum nfs_req_result nfs4_op_create_session(struct nfs_argop4 *op,
 	nfs41_session->nb_slots =
 		MIN(nfs_param.nfsv4_param.nb_slots,
 		    nfs41_session->fore_channel_attrs.ca_maxrequests);
+	LogEvent(component,
+		 "CREATE_SESSION nb_slots: ca_maxrequests=%" PRIu32
+		 " slot_table_size=%" PRIu32 " negotiated=%" PRIu32,
+		 nfs41_session->fore_channel_attrs.ca_maxrequests,
+		 nfs_param.nfsv4_param.nb_slots, nfs41_session->nb_slots);
 	nfs41_session->fc_slots = gsh_calloc(nfs41_session->nb_slots,
 					     sizeof(nfs41_session_slot_t));
 	nfs41_session->bc_slots = gsh_calloc(nfs41_session->nb_slots,
