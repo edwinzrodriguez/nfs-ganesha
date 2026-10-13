@@ -83,10 +83,27 @@ if(USE_FSAL_GPFS)
         COMMAND ${Python3_EXECUTABLE} ${SETUP_PY} install --skip-build --no-compile --prefix=\$ENV{DESTDIR}${CMAKE_INSTALL_PREFIX} --install-scripts=\$ENV{DESTDIR}${LIBEXECDIR}/ganesha)"
         )
       else()
+      # python -m installer refuses to overwrite; remove prior install first
+      set(_gpfs_epoch_site
+        "${CMAKE_INSTALL_PREFIX}/lib/python${Python3_VERSION_MAJOR}.${Python3_VERSION_MINOR}/site-packages")
+      set(_gpfs_epoch_wheel
+        "dist/gpfs-${GANESHA_MAJOR_VERSION}${GANESHA_MINOR_VERSION}-py3-none-any.whl")
       install(
         CODE
-        "execute_process(WORKING_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}
-        COMMAND ${Python3_EXECUTABLE} -m installer --destdir \$ENV{DESTDIR} dist/gpfs-${GANESHA_MAJOR_VERSION}${GANESHA_MINOR_VERSION}-py3-none-any.whl)"
+        "set(_dest \"\$ENV{DESTDIR}\")
+         set(_site \"\${_dest}${_gpfs_epoch_site}\")
+         set(_bindir \"\${_dest}${CMAKE_INSTALL_PREFIX}/bin\")
+         set(_libexec \"\${_dest}${LIBEXECDIR}/ganesha\")
+         file(GLOB _distinfo \"\${_site}/gpfs-*.dist-info\")
+         file(REMOVE_RECURSE \${_distinfo})
+         file(REMOVE \"\${_site}/gpfs-epoch.py\" \"\${_site}/__init__.py\"
+              \"\${_bindir}/gpfs-epoch\" \"\${_libexec}/gpfs-epoch\")
+         execute_process(WORKING_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}
+           COMMAND ${Python3_EXECUTABLE} -m installer --destdir=\${_dest}/ --prefix=${CMAKE_INSTALL_PREFIX} ${_gpfs_epoch_wheel}
+           RESULT_VARIABLE _rc)
+         if(NOT _rc EQUAL 0)
+           message(FATAL_ERROR \"Failed to install ${_gpfs_epoch_wheel}\")
+         endif()"
         )
       endif()
   endif(Python3_FOUND)

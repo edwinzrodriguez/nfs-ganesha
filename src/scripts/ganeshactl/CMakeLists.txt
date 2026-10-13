@@ -163,10 +163,27 @@ if(Python3_FOUND)
         COMMAND ${Python3_EXECUTABLE} ${SETUP_PY} install --skip-build --no-compile --prefix=\$ENV{DESTDIR}${CMAKE_INSTALL_PREFIX})"
       )
   else()
+    # python -m installer refuses to overwrite; remove prior install first
+    set(_ganeshactl_site
+      "${CMAKE_INSTALL_PREFIX}/lib/python${Python3_VERSION_MAJOR}.${Python3_VERSION_MINOR}/site-packages")
+    set(_ganeshactl_wheel
+      "dist/ganeshactl-${GANESHA_MAJOR_VERSION}${GANESHA_MINOR_VERSION}-py3-none-any.whl")
     install(
       CODE
-      "execute_process(WORKING_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}
-        COMMAND ${Python3_EXECUTABLE} -m installer --destdir \$ENV{DESTDIR} dist/ganeshactl-${GANESHA_MAJOR_VERSION}${GANESHA_MINOR_VERSION}-py3-none-any.whl)"
+      "set(_dest \"\$ENV{DESTDIR}\")
+       set(_site \"\${_dest}${_ganeshactl_site}\")
+       set(_bindir \"\${_dest}${CMAKE_INSTALL_PREFIX}/bin\")
+       file(GLOB _distinfo \"\${_site}/ganeshactl-*.dist-info\")
+       file(REMOVE_RECURSE \"\${_site}/Ganesha\" \${_distinfo})
+       foreach(_s IN ITEMS fake_recall get_clientids grace_period ganesha_mgr ganesha_stats ganesha_conf ganesha_logrotate_mgr ganeshactl ganesha-admin manage_clients manage_logger manage_exports client_stats_9pOps export_stats_9pOps)
+         file(REMOVE \"\${_bindir}/\${_s}\")
+       endforeach()
+       execute_process(WORKING_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}
+         COMMAND ${Python3_EXECUTABLE} -m installer --destdir=\${_dest}/ --prefix=${CMAKE_INSTALL_PREFIX} ${_ganeshactl_wheel}
+         RESULT_VARIABLE _rc)
+       if(NOT _rc EQUAL 0)
+         message(FATAL_ERROR \"Failed to install ${_ganeshactl_wheel}\")
+       endif()"
       )
   endif()
 endif(Python3_FOUND)
