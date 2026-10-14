@@ -30,6 +30,7 @@
 #include "common_utils.h"
 #include "fsal_types.h"
 #include "statx_compat.h"
+#include "ceph_stats.h"
 
 static void posix2ceph_statx(struct stat *st, struct ceph_statx *stx)
 {
@@ -58,7 +59,8 @@ int fsal_ceph_ll_walk(struct ceph_mount_info *cmount, const char *name,
 	int rc;
 	struct stat st;
 
-	rc = ceph_ll_walk(cmount, name, i, &st);
+	CEPH_FSAL_TIME_CALL(CEPH_STAT_WALK,
+			    rc = ceph_ll_walk(cmount, name, i, &st));
 	if (rc == 0)
 		posix2ceph_statx(&st, stx);
 	return rc;
@@ -71,8 +73,10 @@ int fsal_ceph_ll_getattr(struct ceph_mount_info *cmount, struct Inode *in,
 	int rc;
 	struct stat st;
 
-	rc = ceph_ll_getattr(cmount, in, &st, cred->caller_uid,
-			     cred->caller_gid);
+	CEPH_FSAL_TIME_CALL(
+		CEPH_STAT_GETATTR,
+		rc = ceph_ll_getattr(cmount, in, &st, cred->caller_uid,
+				     cred->caller_gid));
 	if (rc == 0)
 		posix2ceph_statx(&st, stx);
 	return rc;
@@ -85,8 +89,10 @@ int fsal_ceph_ll_lookup(struct ceph_mount_info *cmount, Inode *parent,
 	int rc;
 	struct stat st;
 
-	rc = ceph_ll_lookup(cmount, parent, name, &st, out, cred->caller_uid,
-			    cred->caller_gid);
+	CEPH_FSAL_TIME_CALL(
+		CEPH_STAT_LOOKUP,
+		rc = ceph_ll_lookup(cmount, parent, name, &st, out,
+				    cred->caller_uid, cred->caller_gid));
 	if (rc == 0)
 		posix2ceph_statx(&st, stx);
 	return rc;
@@ -100,8 +106,10 @@ int fsal_ceph_ll_mkdir(struct ceph_mount_info *cmount, Inode *parent,
 	int rc;
 	struct stat st;
 
-	rc = ceph_ll_mkdir(cmount, parent, name, mode, &st, out,
-			   cred->caller_uid, cred->caller_gid);
+	CEPH_FSAL_TIME_CALL(
+		CEPH_STAT_MKDIR,
+		rc = ceph_ll_mkdir(cmount, parent, name, mode, &st, out,
+				   cred->caller_uid, cred->caller_gid));
 	if (rc == 0)
 		posix2ceph_statx(&st, stx);
 	return rc;
@@ -116,8 +124,10 @@ int fsal_ceph_ll_mknod(struct ceph_mount_info *cmount, Inode *parent,
 	int rc;
 	struct stat st;
 
-	rc = ceph_ll_mknod(cmount, parent, name, mode, rdev, &st, out,
-			   cred->caller_uid, cred->caller_gid);
+	CEPH_FSAL_TIME_CALL(
+		CEPH_STAT_MKNOD,
+		rc = ceph_ll_mknod(cmount, parent, name, mode, rdev, &st, out,
+				   cred->caller_uid, cred->caller_gid));
 	if (rc == 0)
 		posix2ceph_statx(&st, stx);
 	return rc;
@@ -132,8 +142,10 @@ int fsal_ceph_ll_symlink(struct ceph_mount_info *cmount, Inode *parent,
 	int rc;
 	struct stat st;
 
-	rc = ceph_ll_symlink(cmount, parent, name, link_path, &st, out,
-			     cred->caller_uid, cred->caller_gid);
+	CEPH_FSAL_TIME_CALL(
+		CEPH_STAT_SYMLINK,
+		rc = ceph_ll_symlink(cmount, parent, name, link_path, &st, out,
+				     cred->caller_uid, cred->caller_gid));
 	if (rc == 0)
 		posix2ceph_statx(&st, stx);
 	return rc;
@@ -147,8 +159,11 @@ int fsal_ceph_ll_create(struct ceph_mount_info *cmount, Inode *parent,
 	int rc;
 	struct stat st;
 
-	rc = ceph_ll_create(cmount, parent, name, mode, oflags, &st, outp, fhp,
-			    cred->caller_uid, cred->caller_gid);
+	CEPH_FSAL_TIME_CALL(
+		CEPH_STAT_CREATE,
+		rc = ceph_ll_create(cmount, parent, name, mode, oflags, &st,
+				    outp, fhp, cred->caller_uid,
+				    cred->caller_gid));
 	if (rc == 0)
 		posix2ceph_statx(&st, stx);
 	return rc;
@@ -158,6 +173,7 @@ int fsal_ceph_ll_setattr(struct ceph_mount_info *cmount, Inode *i,
 			 struct ceph_statx *stx, unsigned int mask,
 			 const struct user_cred *cred)
 {
+	int rc;
 	struct stat st;
 
 	memset(&st, 0, sizeof(st));
@@ -175,8 +191,11 @@ int fsal_ceph_ll_setattr(struct ceph_mount_info *cmount, Inode *i,
 		st.st_ctim = stx->stx_ctime;
 	if (mask & CEPH_SETATTR_SIZE)
 		st.st_size = stx->stx_size;
-	return ceph_ll_setattr(cmount, i, &st, mask, cred->caller_uid,
-			       cred->caller_gid);
+	CEPH_FSAL_TIME_CALL(
+		CEPH_STAT_SETATTR,
+		rc = ceph_ll_setattr(cmount, i, &st, mask, cred->caller_uid,
+				     cred->caller_gid));
+	return rc;
 }
 
 int fsal_ceph_readdirplus(struct ceph_mount_info *cmount,

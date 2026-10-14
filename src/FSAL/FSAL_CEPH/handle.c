@@ -321,7 +321,8 @@ static fsal_status_t ceph_fsal_readdir(struct fsal_obj_handle *dir_pub,
 
 closedir:
 
-	rc = ceph_ll_releasedir(export->cmount, dir_desc);
+	CEPH_FSAL_TIME_CALL(CEPH_STAT_RELEASEDIR,
+			    rc = ceph_ll_releasedir(export->cmount, dir_desc));
 
 	if (rc < 0)
 		fsal_status = ceph2fsal_error(rc);
@@ -946,7 +947,11 @@ static fsal_status_t ceph_close_my_fd(struct ceph_fd *my_fd)
 		container_of(op_ctx->fsal_export, struct ceph_export, export);
 
 	if (my_fd->fd != NULL && my_fd->fsal_fd.openflags != FSAL_O_CLOSED) {
-		int rc = ceph_ll_close(export->cmount, my_fd->fd);
+		int rc;
+
+		CEPH_FSAL_TIME_CALL(CEPH_STAT_CLOSE,
+				    rc = ceph_ll_close(export->cmount,
+						       my_fd->fd));
 
 		if (rc < 0) {
 			/*
@@ -1012,7 +1017,9 @@ static fsal_status_t ceph_reopen_func(struct fsal_obj_handle *obj_hdl,
 			/* File was previously open, close old fd */
 			LogFullDebug(COMPONENT_FSAL, "close failed with %s",
 				     strerror(-rc));
-			rc = ceph_ll_close(export->cmount, my_fd->fd);
+			CEPH_FSAL_TIME_CALL(
+				CEPH_STAT_CLOSE,
+				rc = ceph_ll_close(export->cmount, my_fd->fd));
 
 			if (rc < 0) {
 				LogFullDebug(COMPONENT_FSAL,
@@ -2005,7 +2012,9 @@ static void ceph_fsal_read2(struct fsal_obj_handle *obj_hdl, bool bypass,
 
 	if (!CephFSM.async) {
 		/* Do zerocopy non-async I/O */
-		ceph_ll_readv_writev(export->cmount, &cbi->io_info);
+		CEPH_FSAL_TIME_CALL(
+			CEPH_STAT_READ,
+			ceph_ll_readv_writev(export->cmount, &cbi->io_info));
 		return;
 	}
 #endif
@@ -2042,9 +2051,12 @@ old_style:
 #endif
 
 	for (i = 0; i < read_arg->iov_count; i++) {
-		nb_read = ceph_ll_read(export->cmount, my_fd->fd, offset,
-				       read_arg->iov[i].iov_len,
-				       read_arg->iov[i].iov_base);
+		CEPH_FSAL_TIME_CALL(
+			CEPH_STAT_READ,
+			nb_read = ceph_ll_read(export->cmount, my_fd->fd,
+					       offset,
+					       read_arg->iov[i].iov_len,
+					       read_arg->iov[i].iov_base));
 
 		if (nb_read == 0) {
 			read_arg->end_of_file = true;
@@ -2338,9 +2350,12 @@ static void ceph_fsal_write2(struct fsal_obj_handle *obj_hdl, bool bypass,
 old_style:
 #endif
 	for (i = 0; i < write_arg->iov_count; i++) {
-		nb_written = ceph_ll_write(export->cmount, my_fd->fd, offset,
-					   write_arg->iov[i].iov_len,
-					   write_arg->iov[i].iov_base);
+		CEPH_FSAL_TIME_CALL(
+			CEPH_STAT_WRITE,
+			nb_written = ceph_ll_write(export->cmount, my_fd->fd,
+						   offset,
+						   write_arg->iov[i].iov_len,
+						   write_arg->iov[i].iov_base));
 
 		if (nb_written == 0) {
 			break;
@@ -2354,8 +2369,10 @@ old_style:
 	}
 
 	if (write_arg->fsal_stable) {
-		retval = ceph_ll_fsync(export->cmount, my_fd->fd,
-				      CephFSM.syncdataonly);
+		CEPH_FSAL_TIME_CALL(
+			CEPH_STAT_FSYNC,
+			retval = ceph_ll_fsync(export->cmount, my_fd->fd,
+					       CephFSM.syncdataonly));
 
 		if (retval < 0) {
 			status = ceph2fsal_error(retval);
@@ -2427,7 +2444,9 @@ static fsal_status_t ceph_fsal_commit2(struct fsal_obj_handle *obj_hdl,
 	 * altogether. Since we don't need to check share reservation, this
 	 * totally avoids dealing with the obj_lock or any fsal_fd.
 	 */
-	retval = ceph_ll_sync_inode(export->cmount, myself->i, 0);
+	CEPH_FSAL_TIME_CALL(CEPH_STAT_FSYNC,
+			    retval = ceph_ll_sync_inode(export->cmount,
+							myself->i, 0));
 
 	GSH_UNIQUE_AUTO_TRACEPOINT(fsal_ceph, ceph_commit, TRACE_DEBUG,
 				   "Write. fileid: {}", obj_hdl->fileid);
@@ -2471,7 +2490,9 @@ static fsal_status_t ceph_fsal_commit2(struct fsal_obj_handle *obj_hdl,
 
 	my_fd = container_of(out_fd, struct ceph_fd, fsal_fd);
 
-	retval = ceph_ll_fsync(export->cmount, my_fd->fd, false);
+	CEPH_FSAL_TIME_CALL(CEPH_STAT_FSYNC,
+			    retval = ceph_ll_fsync(export->cmount, my_fd->fd,
+						   false));
 
 	if (retval < 0)
 		status = ceph2fsal_error(retval);
@@ -2606,11 +2627,16 @@ static fsal_status_t ceph_fsal_lock_op2(struct fsal_obj_handle *obj_hdl,
 	my_fd = container_of(out_fd, struct ceph_fd, fsal_fd);
 
 	if (lock_op == FSAL_OP_LOCKT) {
-		retval = ceph_ll_getlk(export->cmount, my_fd->fd, &lock_args,
-				       (uint64_t)owner);
+		CEPH_FSAL_TIME_CALL(
+			CEPH_STAT_GETLK,
+			retval = ceph_ll_getlk(export->cmount, my_fd->fd,
+					       &lock_args, (uint64_t)owner));
 	} else {
-		retval = ceph_ll_setlk(export->cmount, my_fd->fd, &lock_args,
-				       (uint64_t)owner, false);
+		CEPH_FSAL_TIME_CALL(
+			CEPH_STAT_SETLK,
+			retval = ceph_ll_setlk(export->cmount, my_fd->fd,
+					       &lock_args, (uint64_t)owner,
+					       false));
 	}
 
 	if (retval < 0) {
@@ -2623,8 +2649,11 @@ static fsal_status_t ceph_fsal_lock_op2(struct fsal_obj_handle *obj_hdl,
 			int retval2;
 
 			/* Get the conflicting lock */
-			retval2 = ceph_ll_getlk(export->cmount, my_fd->fd,
-						&lock_args, (uint64_t)owner);
+			CEPH_FSAL_TIME_CALL(
+				CEPH_STAT_GETLK,
+				retval2 = ceph_ll_getlk(export->cmount,
+							my_fd->fd, &lock_args,
+							(uint64_t)owner));
 
 			if (retval2 < 0) {
 				LogCrit(COMPONENT_FSAL,
@@ -3274,15 +3303,19 @@ static fsal_status_t ceph_fsal_fallocate(struct fsal_obj_handle *obj_hdl,
 	my_fd = container_of(out_fd, struct ceph_fd, fsal_fd);
 
 	mode = allocate ? 0 : FALLOC_FL_KEEP_SIZE | FALLOC_FL_PUNCH_HOLE;
-	retval = ceph_ll_fallocate(export->cmount, my_fd->fd, mode, offset,
-				   length);
+	CEPH_FSAL_TIME_CALL(
+		CEPH_STAT_FALLOCATE,
+		retval = ceph_ll_fallocate(export->cmount, my_fd->fd, mode,
+					   offset, length));
 
 	if (retval < 0) {
 		status = ceph2fsal_error(retval);
 		goto out;
 	}
 
-	retval = ceph_ll_fsync(export->cmount, my_fd->fd, false);
+	CEPH_FSAL_TIME_CALL(CEPH_STAT_FSYNC,
+			    retval = ceph_ll_fsync(export->cmount, my_fd->fd,
+						   false));
 	if (retval < 0)
 		status = ceph2fsal_error(retval);
 
