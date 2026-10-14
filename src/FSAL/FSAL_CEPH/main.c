@@ -162,6 +162,8 @@ static fsal_status_t init_config(struct fsal_module *module_in,
 
 	LogDebug(COMPONENT_FSAL, "Ceph module setup.");
 
+	(void)ceph_prepare_for_stats(module_in);
+
 	(void)load_config_from_parse(config_struct, &ceph_block, myself, true,
 				     err_type);
 	if (!config_error_is_harmless(err_type))
@@ -1126,6 +1128,10 @@ MODULE_INIT void init(void)
 	myself->m_ops.fsal_reclaim_client = node_takeover_reclaim;
 	myself->m_ops.handle_deleg_transition = handle_deleg_transition;
 	myself->m_ops.fsal_register_nfs_service = ceph_register_nfs_service;
+#ifdef USE_DBUS
+	myself->m_ops.fsal_extract_stats = ceph_fsal_extract_stats;
+#endif
+	myself->m_ops.fsal_reset_stats = ceph_fsal_reset_stats;
 
 	/* Initialize the fsal_obj_handle ops for FSAL CEPH */
 	handle_ops_init(&CephFSM.handle_ops);
