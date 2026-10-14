@@ -50,6 +50,7 @@ To display stat counters use:
               fsal <fsal name> | v3_full | v4_full | auth |
               client_io_ops <ip address | all> | export_details <export id> |
               client_all_ops <ip address | all> | mem_stats <show | status>]
+  fsal name is the registered FSAL module name (e.g. GPFS, Ceph).
 
 To display stat counters in json format use:
   {progname} json <command>
