@@ -32,6 +32,8 @@ SET(fsalceph_LIB_SRCS
    internal.c
    internal.h
    statx_compat.h
+   fsal_stats_ceph.c
+   ceph_stats.h
 )
 
 if (NOT CEPH_FS_CEPH_STATX)
@@ -44,6 +46,12 @@ endif(NOT CEPH_FS_CEPH_STATX)
 message(STATUS "CEPHFS_INCLUDE_DIR = ${CEPHFS_INCLUDE_DIR}")
 
 include_directories(${CEPHFS_INCLUDE_DIR})
+
+if(USE_DBUS)
+  include_directories(
+    ${DBUS_INCLUDE_DIRS}
+    )
+endif(USE_DBUS)
 
 add_library(fsalceph MODULE ${fsalceph_LIB_SRCS})
 add_sanitizers(fsalceph)
