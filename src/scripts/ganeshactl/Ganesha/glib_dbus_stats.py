@@ -1296,8 +1296,30 @@ class StatsStatus(Report):
 
 class DumpFSALStats(Report):
     def __init__(self, stats):
+        super().__init__(stats)
         self.curtime = time.time()
         self.stats = stats
+
+    def fill_report(self, report):
+        # Shared wire format: status, errmsg, timestamp, fsal_name,
+        # flat (op, count, avg, min, max)* struct, message.
+        report["fsal"] = dbus_to_std(self.stats[3])
+        report["message"] = dbus_to_std(self.stats[5])
+        report["ops"] = {}
+        if self.stats[5] != "OK":
+            return
+
+        op_stats = self.stats[4]
+        i = 0
+        while (i + 5) <= len(op_stats):
+            name = dbus_to_std(op_stats[i])
+            report["ops"][name] = {
+                "total": dbus_to_std(op_stats[i + 1]),
+                "avg_ms": dbus_to_std(op_stats[i + 2]),
+                "min_ms": dbus_to_std(op_stats[i + 3]),
+                "max_ms": dbus_to_std(op_stats[i + 4]),
+            }
+            i += 5
 
     def __str__(self):
         output = ""
