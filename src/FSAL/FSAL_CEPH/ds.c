@@ -145,11 +145,13 @@ static nfsstat4 ds_read(struct fsal_ds_handle *const ds_pub,
 		return NFS4ERR_PNFS_IO_HOLE;
 	}
 
-	amount_read = ceph_ll_read_block(export->cmount, ds->wire.wire.vi,
-					 stripe, buffer, internal_offset,
-					 min((stripe_width - internal_offset),
-					     requested_length),
-					 &(ds->wire.layout));
+	CEPH_FSAL_TIME_CALL(
+		CEPH_STAT_DS_READ,
+		amount_read = ceph_ll_read_block(
+			export->cmount, ds->wire.wire.vi, stripe, buffer,
+			internal_offset,
+			min((stripe_width - internal_offset), requested_length),
+			&(ds->wire.layout)));
 	if (amount_read < 0)
 		return posix2nfs4_error(-amount_read);
 
@@ -264,25 +266,37 @@ static nfsstat4 ds_write(struct fsal_ds_handle *const ds_pub,
 			return posix2nfs4_error(-ceph_status);
 		}
 
-		amount_written = ceph_ll_write(export->cmount, descriptor,
-					       offset, adjusted_write, buffer);
+		CEPH_FSAL_TIME_CALL(
+			CEPH_STAT_DS_WRITE,
+			amount_written = ceph_ll_write(export->cmount,
+						       descriptor, offset,
+						       adjusted_write, buffer));
 
 		if (amount_written < 0) {
 			LogMajor(COMPONENT_FSAL, "Write failed with: %d",
 				 amount_written);
-			ceph_ll_close(export->cmount, descriptor);
+			CEPH_FSAL_TIME_CALL(
+				CEPH_STAT_CLOSE,
+				ceph_ll_close(export->cmount, descriptor));
 			return posix2nfs4_error(-amount_written);
 		}
 
-		ceph_status = ceph_ll_fsync(export->cmount, descriptor, 0);
+		CEPH_FSAL_TIME_CALL(
+			CEPH_STAT_FSYNC,
+			ceph_status = ceph_ll_fsync(export->cmount, descriptor,
+						    0));
 		if (ceph_status < 0) {
 			LogMajor(COMPONENT_FSAL "fsync failed with: %d",
 				 ceph_status);
-			ceph_ll_close(export->cmount, descriptor);
+			CEPH_FSAL_TIME_CALL(
+				CEPH_STAT_CLOSE,
+				ceph_ll_close(export->cmount, descriptor));
 			return posix2nfs4_error(-ceph_status);
 		}
 
-		ceph_status = ceph_ll_close(export->cmount, descriptor);
+		CEPH_FSAL_TIME_CALL(
+			CEPH_STAT_CLOSE,
+			ceph_status = ceph_ll_close(export->cmount, descriptor));
 		if (ceph_status < 0) {
 			LogMajor(COMPONENT_FSAL, "close failed with: %d",
 				 ceph_status);
@@ -298,11 +312,13 @@ static nfsstat4 ds_write(struct fsal_ds_handle *const ds_pub,
 		/* FILE_SYNC4 wasn't specified, so we don't have to
 		   bother with the MDS. */
 
-		amount_written = ceph_ll_write_block(
-			export->cmount, ds->wire.wire.vi, stripe,
-			(char *)buffer, internal_offset, adjusted_write,
-			&(ds->wire.layout), ds->wire.snapseq,
-			(stability_wanted == DATA_SYNC4));
+		CEPH_FSAL_TIME_CALL(
+			CEPH_STAT_DS_WRITE,
+			amount_written = ceph_ll_write_block(
+				export->cmount, ds->wire.wire.vi, stripe,
+				(char *)buffer, internal_offset, adjusted_write,
+				&(ds->wire.layout), ds->wire.snapseq,
+				(stability_wanted == DATA_SYNC4)));
 		if (amount_written < 0)
 			return posix2nfs4_error(-amount_written);
 
