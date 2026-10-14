@@ -27,6 +27,7 @@
 #define _FSAL_CEPH_STATX_COMPAT_H
 
 #include "fsal_types.h"
+#include "ceph_stats.h"
 
 /*
  * Depending on what we'll be doing with the resulting statx structure, we
@@ -59,9 +60,12 @@ static inline int fsal_ceph_ll_walk(struct ceph_mount_info *cmount,
 	if (!perms)
 		return -ENOMEM;
 
-	ret = ceph_ll_walk(cmount, name, i, stx,
-			   full ? CEPH_STATX_ATTR_MASK : CEPH_STATX_HANDLE_MASK,
-			   0, perms);
+	CEPH_FSAL_TIME_CALL(
+		CEPH_STAT_WALK,
+		ret = ceph_ll_walk(cmount, name, i, stx,
+				   full ? CEPH_STATX_ATTR_MASK
+					: CEPH_STATX_HANDLE_MASK,
+				   0, perms));
 	ceph_userperm_destroy(perms);
 	return ret;
 }
@@ -77,7 +81,9 @@ static inline int fsal_ceph_ll_getattr(struct ceph_mount_info *cmount,
 	if (!perms)
 		return -ENOMEM;
 
-	ret = ceph_ll_getattr(cmount, in, stx, want, 0, perms);
+	CEPH_FSAL_TIME_CALL(CEPH_STAT_GETATTR,
+			    ret = ceph_ll_getattr(cmount, in, stx, want, 0,
+						  perms));
 	ceph_userperm_destroy(perms);
 	return ret;
 }
@@ -93,10 +99,12 @@ static inline int fsal_ceph_ll_lookup(struct ceph_mount_info *cmount,
 	if (!perms)
 		return -ENOMEM;
 
-	ret = ceph_ll_lookup(cmount, parent, name, out, stx,
-			     full ? CEPH_STATX_ATTR_MASK
-				  : CEPH_STATX_HANDLE_MASK,
-			     0, perms);
+	CEPH_FSAL_TIME_CALL(
+		CEPH_STAT_LOOKUP,
+		ret = ceph_ll_lookup(cmount, parent, name, out, stx,
+				     full ? CEPH_STATX_ATTR_MASK
+					  : CEPH_STATX_HANDLE_MASK,
+				     0, perms));
 	ceph_userperm_destroy(perms);
 	return ret;
 }
@@ -113,10 +121,12 @@ static inline int fsal_ceph_ll_mkdir(struct ceph_mount_info *cmount,
 	if (!perms)
 		return -ENOMEM;
 
-	ret = ceph_ll_mkdir(cmount, parent, name, mode, out, stx,
-			    full ? CEPH_STATX_ATTR_MASK
-				 : CEPH_STATX_HANDLE_MASK,
-			    0, perms);
+	CEPH_FSAL_TIME_CALL(
+		CEPH_STAT_MKDIR,
+		ret = ceph_ll_mkdir(cmount, parent, name, mode, out, stx,
+				    full ? CEPH_STATX_ATTR_MASK
+					 : CEPH_STATX_HANDLE_MASK,
+				    0, perms));
 	ceph_userperm_destroy(perms);
 	return ret;
 }
@@ -133,10 +143,12 @@ static inline int fsal_ceph_ll_mknod(struct ceph_mount_info *cmount,
 	if (!perms)
 		return -ENOMEM;
 
-	ret = ceph_ll_mknod(cmount, parent, name, mode, rdev, out, stx,
-			    full ? CEPH_STATX_ATTR_MASK
-				 : CEPH_STATX_HANDLE_MASK,
-			    0, perms);
+	CEPH_FSAL_TIME_CALL(
+		CEPH_STAT_MKNOD,
+		ret = ceph_ll_mknod(cmount, parent, name, mode, rdev, out, stx,
+				    full ? CEPH_STATX_ATTR_MASK
+					 : CEPH_STATX_HANDLE_MASK,
+				    0, perms));
 	ceph_userperm_destroy(perms);
 	return ret;
 }
@@ -153,10 +165,12 @@ static inline int fsal_ceph_ll_symlink(struct ceph_mount_info *cmount,
 	if (!perms)
 		return -ENOMEM;
 
-	ret = ceph_ll_symlink(cmount, parent, name, link_path, out, stx,
-			      full ? CEPH_STATX_ATTR_MASK
-				   : CEPH_STATX_HANDLE_MASK,
-			      0, perms);
+	CEPH_FSAL_TIME_CALL(
+		CEPH_STAT_SYMLINK,
+		ret = ceph_ll_symlink(cmount, parent, name, link_path, out, stx,
+				      full ? CEPH_STATX_ATTR_MASK
+					   : CEPH_STATX_HANDLE_MASK,
+				      0, perms));
 	ceph_userperm_destroy(perms);
 	return ret;
 }
@@ -171,7 +185,9 @@ static inline int fsal_ceph_ll_readlink(struct ceph_mount_info *cmount,
 	if (!perms)
 		return -ENOMEM;
 
-	ret = ceph_ll_readlink(cmount, in, buf, bufsize, perms);
+	CEPH_FSAL_TIME_CALL(CEPH_STAT_READLINK,
+			    ret = ceph_ll_readlink(cmount, in, buf, bufsize,
+						   perms));
 	ceph_userperm_destroy(perms);
 	return ret;
 }
@@ -188,10 +204,13 @@ static inline int fsal_ceph_ll_create(struct ceph_mount_info *cmount,
 	if (!perms)
 		return -ENOMEM;
 
-	ret = ceph_ll_create(cmount, parent, name, mode, oflags, outp, fhp, stx,
-			     full ? CEPH_STATX_ATTR_MASK
-				  : CEPH_STATX_HANDLE_MASK,
-			     0, perms);
+	CEPH_FSAL_TIME_CALL(
+		CEPH_STAT_CREATE,
+		ret = ceph_ll_create(cmount, parent, name, mode, oflags, outp,
+				     fhp, stx,
+				     full ? CEPH_STATX_ATTR_MASK
+					  : CEPH_STATX_HANDLE_MASK,
+				     0, perms));
 	ceph_userperm_destroy(perms);
 	return ret;
 }
@@ -207,10 +226,12 @@ static inline int fsal_ceph_ll_setattr(struct ceph_mount_info *cmount, Inode *i,
 	if (!perms)
 		return -ENOMEM;
 
-	ret = ceph_ll_setattr(cmount, i, stx, mask, perms);
+	CEPH_FSAL_TIME_CALL(CEPH_STAT_SETATTR,
+			    ret = ceph_ll_setattr(cmount, i, stx, mask, perms));
 #ifdef USE_FSAL_CEPH_LL_SYNC_INODE
 	if (!ret)
-		ret = ceph_ll_sync_inode(cmount, i, 0);
+		CEPH_FSAL_TIME_CALL(CEPH_STAT_FSYNC,
+				    ret = ceph_ll_sync_inode(cmount, i, 0));
 #endif /* USE_FSAL_CEPH_LL_SYNC_INODE */
 	ceph_userperm_destroy(perms);
 	return ret;
@@ -226,7 +247,8 @@ static inline int fsal_ceph_ll_open(struct ceph_mount_info *cmount, Inode *i,
 	if (!perms)
 		return -ENOMEM;
 
-	ret = ceph_ll_open(cmount, i, flags, fh, perms);
+	CEPH_FSAL_TIME_CALL(CEPH_STAT_OPEN,
+			    ret = ceph_ll_open(cmount, i, flags, fh, perms));
 	ceph_userperm_destroy(perms);
 	return ret;
 }
@@ -242,7 +264,8 @@ static inline int fsal_ceph_ll_opendir(struct ceph_mount_info *cmount,
 	if (!perms)
 		return -ENOMEM;
 
-	ret = ceph_ll_opendir(cmount, in, dirpp, perms);
+	CEPH_FSAL_TIME_CALL(CEPH_STAT_OPENDIR,
+			    ret = ceph_ll_opendir(cmount, in, dirpp, perms));
 	ceph_userperm_destroy(perms);
 	return ret;
 }
@@ -257,7 +280,9 @@ static inline int fsal_ceph_ll_link(struct ceph_mount_info *cmount, Inode *i,
 	if (!perms)
 		return -ENOMEM;
 
-	ret = ceph_ll_link(cmount, i, newparent, name, perms);
+	CEPH_FSAL_TIME_CALL(CEPH_STAT_LINK,
+			    ret = ceph_ll_link(cmount, i, newparent, name,
+						perms));
 	ceph_userperm_destroy(perms);
 	return ret;
 }
@@ -272,7 +297,8 @@ static inline int fsal_ceph_ll_unlink(struct ceph_mount_info *cmount,
 	if (!perms)
 		return -ENOMEM;
 
-	ret = ceph_ll_unlink(cmount, in, name, perms);
+	CEPH_FSAL_TIME_CALL(CEPH_STAT_UNLINK,
+			    ret = ceph_ll_unlink(cmount, in, name, perms));
 	ceph_userperm_destroy(perms);
 	return ret;
 }
@@ -289,7 +315,10 @@ static inline int fsal_ceph_ll_rename(struct ceph_mount_info *cmount,
 	if (!perms)
 		return -ENOMEM;
 
-	ret = ceph_ll_rename(cmount, parent, name, newparent, newname, perms);
+	CEPH_FSAL_TIME_CALL(
+		CEPH_STAT_RENAME,
+		ret = ceph_ll_rename(cmount, parent, name, newparent, newname,
+				     perms));
 	ceph_userperm_destroy(perms);
 	return ret;
 }
@@ -304,7 +333,8 @@ static inline int fsal_ceph_ll_rmdir(struct ceph_mount_info *cmount,
 	if (!perms)
 		return -ENOMEM;
 
-	ret = ceph_ll_rmdir(cmount, in, name, perms);
+	CEPH_FSAL_TIME_CALL(CEPH_STAT_RMDIR,
+			    ret = ceph_ll_rmdir(cmount, in, name, perms));
 	ceph_userperm_destroy(perms);
 	return ret;
 }
@@ -330,7 +360,9 @@ static inline int fsal_ceph_ll_getxattr(struct ceph_mount_info *cmount,
 	if (!perms)
 		return -ENOMEM;
 
-	ret = ceph_ll_getxattr(cmount, in, name, val, size, perms);
+	CEPH_FSAL_TIME_CALL(CEPH_STAT_GETXATTR,
+			    ret = ceph_ll_getxattr(cmount, in, name, val, size,
+						   perms));
 	ceph_userperm_destroy(perms);
 	return ret;
 }
@@ -346,7 +378,10 @@ static inline int fsal_ceph_ll_setxattr(struct ceph_mount_info *cmount,
 	if (!perms)
 		return -ENOMEM;
 
-	ret = ceph_ll_setxattr(cmount, in, name, val, size, flags, perms);
+	CEPH_FSAL_TIME_CALL(
+		CEPH_STAT_SETXATTR,
+		ret = ceph_ll_setxattr(cmount, in, name, val, size, flags,
+				       perms));
 	ceph_userperm_destroy(perms);
 	return ret;
 }
@@ -361,7 +396,8 @@ static inline int fsal_ceph_ll_removexattr(struct ceph_mount_info *cmount,
 	if (!perms)
 		return -ENOMEM;
 
-	ret = ceph_ll_removexattr(cmount, in, name, perms);
+	CEPH_FSAL_TIME_CALL(CEPH_STAT_REMOVEXATTR,
+			    ret = ceph_ll_removexattr(cmount, in, name, perms));
 	ceph_userperm_destroy(perms);
 	return ret;
 }
@@ -446,16 +482,26 @@ static inline int fsal_ceph_ll_readlink(struct ceph_mount_info *cmount,
 					Inode *in, char *buf, size_t bufsize,
 					const struct user_cred *creds)
 {
-	return ceph_ll_readlink(cmount, in, buf, bufsize, creds->caller_uid,
-				creds->caller_gid);
+	int ret;
+
+	CEPH_FSAL_TIME_CALL(
+		CEPH_STAT_READLINK,
+		ret = ceph_ll_readlink(cmount, in, buf, bufsize,
+				       creds->caller_uid, creds->caller_gid));
+	return ret;
 }
 
 static inline int fsal_ceph_ll_open(struct ceph_mount_info *cmount, Inode *i,
 				    int flags, Fh **fh,
 				    const struct user_cred *cred)
 {
-	return ceph_ll_open(cmount, i, flags, fh, cred->caller_uid,
-			    cred->caller_gid);
+	int ret;
+
+	CEPH_FSAL_TIME_CALL(CEPH_STAT_OPEN,
+			    ret = ceph_ll_open(cmount, i, flags, fh,
+					       cred->caller_uid,
+					       cred->caller_gid));
+	return ret;
 }
 
 static inline int fsal_ceph_ll_opendir(struct ceph_mount_info *cmount,
@@ -463,26 +509,40 @@ static inline int fsal_ceph_ll_opendir(struct ceph_mount_info *cmount,
 				       struct ceph_dir_result **dirpp,
 				       const struct user_cred *cred)
 {
-	return ceph_ll_opendir(cmount, in, dirpp, cred->caller_uid,
-			       cred->caller_gid);
+	int ret;
+
+	CEPH_FSAL_TIME_CALL(CEPH_STAT_OPENDIR,
+			    ret = ceph_ll_opendir(cmount, in, dirpp,
+						  cred->caller_uid,
+						  cred->caller_gid));
+	return ret;
 }
 
 static inline int fsal_ceph_ll_link(struct ceph_mount_info *cmount, Inode *i,
 				    Inode *newparent, const char *name,
 				    const struct user_cred *cred)
 {
+	int ret;
 	struct stat st;
 
-	return ceph_ll_link(cmount, i, newparent, name, &st, cred->caller_uid,
-			    cred->caller_gid);
+	CEPH_FSAL_TIME_CALL(
+		CEPH_STAT_LINK,
+		ret = ceph_ll_link(cmount, i, newparent, name, &st,
+				   cred->caller_uid, cred->caller_gid));
+	return ret;
 }
 
 static inline int fsal_ceph_ll_unlink(struct ceph_mount_info *cmount,
 				      struct Inode *in, const char *name,
 				      const struct user_cred *cred)
 {
-	return ceph_ll_unlink(cmount, in, name, cred->caller_uid,
-			      cred->caller_gid);
+	int ret;
+
+	CEPH_FSAL_TIME_CALL(CEPH_STAT_UNLINK,
+			    ret = ceph_ll_unlink(cmount, in, name,
+						 cred->caller_uid,
+						 cred->caller_gid));
+	return ret;
 }
 
 static inline int fsal_ceph_ll_rename(struct ceph_mount_info *cmount,
@@ -491,16 +551,26 @@ static inline int fsal_ceph_ll_rename(struct ceph_mount_info *cmount,
 				      const char *newname,
 				      const struct user_cred *cred)
 {
-	return ceph_ll_rename(cmount, parent, name, newparent, newname,
-			      cred->caller_uid, cred->caller_gid);
+	int ret;
+
+	CEPH_FSAL_TIME_CALL(
+		CEPH_STAT_RENAME,
+		ret = ceph_ll_rename(cmount, parent, name, newparent, newname,
+				     cred->caller_uid, cred->caller_gid));
+	return ret;
 }
 
 static inline int fsal_ceph_ll_rmdir(struct ceph_mount_info *cmount,
 				     struct Inode *in, const char *name,
 				     const struct user_cred *cred)
 {
-	return ceph_ll_rmdir(cmount, in, name, cred->caller_uid,
-			     cred->caller_gid);
+	int ret;
+
+	CEPH_FSAL_TIME_CALL(CEPH_STAT_RMDIR,
+			    ret = ceph_ll_rmdir(cmount, in, name,
+						cred->caller_uid,
+						cred->caller_gid));
+	return ret;
 }
 
 static inline int fsal_ceph_ll_getxattr(struct ceph_mount_info *cmount,
@@ -508,8 +578,13 @@ static inline int fsal_ceph_ll_getxattr(struct ceph_mount_info *cmount,
 					char *val, size_t size,
 					const struct user_cred *cred)
 {
-	return ceph_ll_getxattr(cmount, in, name, val, size, cred->caller_uid,
-				cred->caller_gid);
+	int ret;
+
+	CEPH_FSAL_TIME_CALL(
+		CEPH_STAT_GETXATTR,
+		ret = ceph_ll_getxattr(cmount, in, name, val, size,
+				       cred->caller_uid, cred->caller_gid));
+	return ret;
 }
 
 static inline int fsal_ceph_ll_setxattr(struct ceph_mount_info *cmount,
@@ -517,16 +592,26 @@ static inline int fsal_ceph_ll_setxattr(struct ceph_mount_info *cmount,
 					char *val, size_t size, int flags,
 					const struct user_cred *cred)
 {
-	return ceph_ll_setxattr(cmount, in, name, val, size, flags,
-				cred->caller_uid, cred->caller_gid);
+	int ret;
+
+	CEPH_FSAL_TIME_CALL(
+		CEPH_STAT_SETXATTR,
+		ret = ceph_ll_setxattr(cmount, in, name, val, size, flags,
+				       cred->caller_uid, cred->caller_gid));
+	return ret;
 }
 
 static inline int fsal_ceph_ll_removexattr(struct ceph_mount_info *cmount,
 					   struct Inode *in, const char *name,
 					   const struct user_cred *cred)
 {
-	return ceph_ll_removexattr(cmount, in, name, cred->caller_uid,
-				   cred->caller_gid);
+	int ret;
+
+	CEPH_FSAL_TIME_CALL(
+		CEPH_STAT_REMOVEXATTR,
+		ret = ceph_ll_removexattr(cmount, in, name, cred->caller_uid,
+					  cred->caller_gid));
+	return ret;
 }
 #endif /* USE_FSAL_CEPH_STATX */
 #endif /* _FSAL_CEPH_STATX_COMPAT_H */
