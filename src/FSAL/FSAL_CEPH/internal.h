@@ -294,6 +294,13 @@ void export_ops_pnfs(struct export_ops *ops);
 void handle_ops_pnfs(struct fsal_obj_ops *ops);
 #endif /* CEPH_PNFS */
 
+/* FSAL stats (see ceph_stats.h / fsal_stats_ceph.c) */
+void ceph_prepare_for_stats(struct fsal_module *fsal_hdl);
+#ifdef USE_DBUS
+void ceph_fsal_extract_stats(struct fsal_module *fsal_hdl, void *iter);
+#endif
+void ceph_fsal_reset_stats(struct fsal_module *fsal_hdl);
+
 struct state_t *ceph_alloc_state(struct fsal_export *exp_hdl,
 				 enum state_type state_type,
 				 struct state_t *related_state);
