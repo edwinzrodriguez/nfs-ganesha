@@ -1303,28 +1303,31 @@ class DumpFSALStats(Report):
         output = ""
         if not self.stats[0]:
             return "GANESHA RESPONSE STATUS: " + self.stats[1]
-        else:
-            if self.stats[3] == "GPFS":
-                if self.stats[5] != "OK":
-                    output += "No stats available for display"
-                    return output
-                self.starttime = self.stats[2][0] + self.stats[2][1] / 1e9
-                self.duration = self.curtime - self.starttime
-                output += "FSAL stats for - GPFS \n"
-                output += "Stats collected since: " + time.ctime(self.stats[2][0]) + str(self.stats[2][1]) + " nsecs\n"
-                output += "Duration: " + "%.10f" % self.duration + " seconds\n"
-                tot_len = len(self.stats[4])
-                output += "FSAL Stats (response time in milliseconds): \n"
-                output += "\tOp-Name         Total     Res:Avg         Min           Max"
-                i = 0
-                while (i+5) <= tot_len:
-                    output += "\n" + (self.stats[4][i+0]).ljust(20)
-                    output += " %s" % (str(self.stats[4][i+1]).rjust(8))
-                    output += " %12.6f" % (self.stats[4][i+2])
-                    output += " %12.6f" % (self.stats[4][i+3])
-                    output += " %12.6f" % (self.stats[4][i+4])
-                    i += 5
-                return output
+
+        # Shared wire format used by FSALs that implement fsal_extract_stats
+        # (e.g. GPFS, Ceph): status, errmsg, timestamp, fsal_name,
+        # flat (op, count, avg, min, max)* struct, message.
+        fsal_name = self.stats[3]
+        if self.stats[5] != "OK":
+            output += "No stats available for display"
+            return output
+        self.starttime = self.stats[2][0] + self.stats[2][1] / 1e9
+        self.duration = self.curtime - self.starttime
+        output += "FSAL stats for - %s \n" % fsal_name
+        output += "Stats collected since: " + time.ctime(self.stats[2][0]) + str(self.stats[2][1]) + " nsecs\n"
+        output += "Duration: " + "%.10f" % self.duration + " seconds\n"
+        tot_len = len(self.stats[4])
+        output += "FSAL Stats (response time in milliseconds): \n"
+        output += "\tOp-Name         Total     Res:Avg         Min           Max"
+        i = 0
+        while (i+5) <= tot_len:
+            output += "\n" + (self.stats[4][i+0]).ljust(20)
+            output += " %s" % (str(self.stats[4][i+1]).rjust(8))
+            output += " %12.6f" % (self.stats[4][i+2])
+            output += " %12.6f" % (self.stats[4][i+3])
+            output += " %12.6f" % (self.stats[4][i+4])
+            i += 5
+        return output
 
 class StatsEnable():
     def __init__(self, status):
