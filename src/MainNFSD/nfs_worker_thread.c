@@ -995,10 +995,13 @@ static enum xprt_stat nfs_rpc_process_request(nfs_request_t *reqdata,
 	export_check_access();
 
 	/* start the processing clock
-	 * we measure all time stats as intervals (elapsed nsecs) from
-	 * server boot time.  This gets high precision with simple 64 bit math.
+	 * Prefer ntirpc's early recv stamp (CLOCK_MONOTONIC_FAST via rq_stime)
+	 * so latency includes SVC_RECV/decode. Fall back to monotonic now.
 	 */
-	now(&op_ctx->start_time);
+	if (reqdata->svc.rq_stime.tv_sec != 0)
+		op_ctx->start_time = reqdata->svc.rq_stime;
+	else
+		now_mono(&op_ctx->start_time);
 
 	/* Initialized user_credentials */
 	init_credentials();
