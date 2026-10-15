@@ -737,7 +737,22 @@ enum nfs_req_result complete_op(compound_data_t *data, nfsstat4 *status,
 
 out:
 
-	server_stats_nfsv4_op_done(data->opcode, &data->op_start_time, *status);
+	/* Terminal data ops: attribute e2e latency from request start.
+	 * Other ops keep short per-op windows from op_start_time.
+	 */
+	switch (data->opcode) {
+	case NFS4_OP_READ:
+	case NFS4_OP_WRITE:
+	case NFS4_OP_READ_PLUS:
+	case NFS4_OP_WRITE_SAME:
+		server_stats_nfsv4_op_done(data->opcode, &op_ctx->start_time,
+					   *status);
+		break;
+	default:
+		server_stats_nfsv4_op_done(data->opcode, &data->op_start_time,
+					   *status);
+		break;
+	}
 
 	return result;
 }
@@ -825,8 +840,8 @@ enum nfs_req_result process_one_op(compound_data_t *data, nfsstat4 *status)
 		}
 	}
 
-	/* time each op */
-	now(&data->op_start_time);
+	/* time each op (monotonic; matches op_ctx->start_time / rq_stime) */
+	now_mono(&data->op_start_time);
 
 	if (data->minorversion > 0 && data->session != NULL &&
 	    data->session->fore_channel_attrs.ca_maxoperations == data->oppos) {

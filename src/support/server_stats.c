@@ -1262,9 +1262,7 @@ void server_stats_nfs_done(nfs_request_t *reqdata, int rc, bool dup)
 	if (nfs_param.core_param.enable_FASTSTATS)
 		return;
 
-	/* current_time already set above if client != NULL */
-	if (client == NULL)
-		now(&current_time);
+	now_mono(&current_time);
 	time_diff = timespec_diff(&op_ctx->start_time, &current_time);
 
 #ifdef _USE_NFS3
@@ -1285,13 +1283,14 @@ void server_stats_nfs_done(nfs_request_t *reqdata, int rc, bool dup)
 	}
 	if (!dup && op_ctx->ctx_export != NULL) {
 		struct export_stats *exp_st;
+		struct timespec wall_time;
 
 		exp_st = container_of(op_ctx->ctx_export, struct export_stats,
 				      export);
 		record_stats(&exp_st->st, &op_ctx->ctx_export->exp_lock,
 			     reqdata, time_diff, rc == NFS_REQ_OK, dup, true);
-		timespec_update(&op_ctx->ctx_export->last_update,
-				&current_time);
+		now(&wall_time);
+		timespec_update(&op_ctx->ctx_export->last_update, &wall_time);
 	}
 }
 
@@ -1324,9 +1323,7 @@ void server_stats_nfsv4_op_done(int proto_op, struct timespec *start_time,
 	if (nfs_param.core_param.enable_FASTSTATS)
 		return;
 
-	/* current_time already set above if client != NULL */
-	if (client == NULL)
-		now(&current_time);
+	now_mono(&current_time);
 	time_diff = timespec_diff(start_time, &current_time);
 
 	nfs_metrics__nfs4_op_completed(proto_op, status, time_diff);
@@ -1361,14 +1358,15 @@ void server_stats_nfsv4_op_done(int proto_op, struct timespec *start_time,
 
 	if (op_ctx->ctx_export != NULL) {
 		struct export_stats *exp_st;
+		struct timespec wall_time;
 
 		exp_st = container_of(op_ctx->ctx_export, struct export_stats,
 				      export);
 		record_nfsv4_op(&exp_st->st, &op_ctx->ctx_export->exp_lock,
 				proto_op, op_ctx->nfs_minorvers, time_diff,
 				status, true);
-		timespec_update(&op_ctx->ctx_export->last_update,
-				&current_time);
+		now(&wall_time);
+		timespec_update(&op_ctx->ctx_export->last_update, &wall_time);
 	}
 }
 
@@ -1386,30 +1384,33 @@ void server_stats_compound_done(int num_ops, int status)
 
 	if (!nfs_param.core_param.enable_NFSSTATS)
 		return;
-	now(&current_time);
+	now_mono(&current_time);
 	time_diff = timespec_diff(&op_ctx->start_time, &current_time);
 
 	nfs_metrics__nfs4_compound_completed(status, time_diff, num_ops);
 
 	if (client != NULL) {
 		struct server_stats *server_st;
+		struct timespec wall_time;
 
 		server_st = container_of(client, struct server_stats, client);
 		record_compound(&server_st->st, &client->client_lock,
 				op_ctx->nfs_minorvers, num_ops, time_diff,
 				status == NFS4_OK);
-		timespec_update(&client->last_update, &current_time);
+		now(&wall_time);
+		timespec_update(&client->last_update, &wall_time);
 	}
 	if (op_ctx->ctx_export != NULL) {
 		struct export_stats *exp_st;
+		struct timespec wall_time;
 
 		exp_st = container_of(op_ctx->ctx_export, struct export_stats,
 				      export);
 		record_compound(&exp_st->st, &op_ctx->ctx_export->exp_lock,
 				op_ctx->nfs_minorvers, num_ops, time_diff,
 				status == NFS4_OK);
-		timespec_update(&op_ctx->ctx_export->last_update,
-				&current_time);
+		now(&wall_time);
+		timespec_update(&op_ctx->ctx_export->last_update, &wall_time);
 	}
 }
 
