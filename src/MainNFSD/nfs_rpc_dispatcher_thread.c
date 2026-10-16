@@ -58,6 +58,7 @@
 #include "nfsacl.h"
 #include "nfs_init.h"
 #include "nfs_core.h"
+#include "server_stats.h"
 #include "nfs_exports.h"
 #include "nfs_proto_functions.h"
 #include "nfs_dupreq.h"
@@ -1415,6 +1416,7 @@ void nfs_Init_svc(void)
 	svc_params.disconnect_cb = NULL;
 	svc_params.alloc_cb = alloc_nfs_request;
 	svc_params.free_cb = free_nfs_request;
+	svc_params.reply_done_cb = server_stats_nfs_reply_done;
 	svc_params.flags = SVC_INIT_EPOLL; /* use EPOLL event mgmt */
 	svc_params.flags |= SVC_INIT_NOREG_XPRTS; /* don't call xprt_register */
 	svc_params.max_connections = nfs_param.core_param.rpc.max_connections;

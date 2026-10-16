@@ -706,6 +706,27 @@ enum nfs_req_result complete_request(nfs_request_t *reqdata,
 	reqdata->svc.rq_msg.RPCM_ack.ar_results.where = reqdata->res_nfs;
 	reqdata->svc.rq_msg.RPCM_ack.ar_results.proc = reqdesc->xdr_encode_func;
 
+#ifdef _USE_NFS3
+	/* Stamp T3 / terminal opcode for reply-done (T4) when full stats on */
+	if (reqdata->svc.rq_msg.cb_prog == NFS_program[P_NFS] &&
+	    reqdata->svc.rq_msg.cb_vers == NFS_V3 &&
+	    nfs_param.core_param.enable_FULLV3STATS) {
+		uint32_t proc = reqdata->svc.rq_msg.cb_proc;
+
+		if (proc == NFSPROC3_READ || proc == NFSPROC3_WRITE)
+			reqdata->svc.rq_stats_opcode =
+				(int32_t)(proc | RQ_STATS_OPCODE_V3_FLAG);
+		if (reqdata->svc.rq_stats_opcode >= 0)
+			now_mono(&reqdata->svc.rq_reply_time);
+	} else
+#endif
+		if (reqdata->svc.rq_msg.cb_prog == NFS_program[P_NFS] &&
+		    reqdata->svc.rq_msg.cb_vers == NFS_V4 &&
+		    nfs_param.core_param.enable_FULLV4STATS &&
+		    reqdata->svc.rq_stats_opcode >= 0) {
+			now_mono(&reqdata->svc.rq_reply_time);
+		}
+
 	GSH_XPRT_AUTO_TRACEPOINT(nfs_rpc, before_reply, TRACE_INFO, xprt,
 				 "Before reply");
 
