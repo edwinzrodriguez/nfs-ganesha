@@ -71,11 +71,13 @@ if(Python3_FOUND)
   set(SETUP_PY    "${CMAKE_CURRENT_BINARY_DIR}/setup.py")
   set(OUTPUT      "${CMAKE_CURRENT_BINARY_DIR}/build/ganeshactl_timestamp")
 
-  # Generate rules for compiling .ui -> .py
-  set(GANESHA_SRCS)
+  # Always depend on the Ganesha package modules (stats, mgr, etc.).
+  # Previously these were only listed when USE_GUI_ADMIN_TOOLS was ON, so
+  # edits to e.g. glib_dbus_stats.py never rebuilt the wheel and ninja
+  # install kept reinstalling a stale ganeshactl-*.whl.
+  set(GANESHA_SRCS ${GANESHA_BASE_SRCS})
   set(UI_PY_FILES)
   if(USE_GUI_ADMIN_TOOLS)
-    set(GANESHA_SRCS ${GANESHA_BASE_SRCS})
     foreach(ui_file ${UI_SRC})
       string(REPLACE ".ui" ".py" py_file ${ui_file})
       add_custom_command(
