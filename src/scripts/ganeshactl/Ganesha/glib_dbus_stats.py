@@ -1925,7 +1925,7 @@ class DumpFULLV3Stats(Report):
 
         for op_stats in self.result[3]:
             name = dbus_to_std(op_stats[0])
-            report[name] = {
+            entry = {
                 "details": {
                     "total": dbus_to_std(op_stats[1]),
                     "error": dbus_to_std(op_stats[2]),
@@ -1937,6 +1937,10 @@ class DumpFULLV3Stats(Report):
                     "max": dbus_to_std(op_stats[6])
                 }
             }
+            if len(op_stats) > 8:
+                entry["latency"]["e2e_average"] = dbus_to_std(op_stats[7])
+                entry["latency"]["send_average"] = dbus_to_std(op_stats[8])
+            report[name] = entry
 
     def __str__(self):
         output = ""
@@ -1953,7 +1957,7 @@ class DumpFULLV3Stats(Report):
             output += "Duration: " + "%.10f" % self.duration + " seconds\n"
             output += "\nOperation Details                         |  Operation Latency (in milliseconds)"
             output += "\n==========================================|========================================"
-            output += "\nName            Total     Error      Dups |       Avg          Min           Max   "
+            output += "\nName            Total     Error      Dups |       Avg          Min           Max        E2E       Send"
             i = 0
             tot_len = len(self.stats[3])
             while i < tot_len:
@@ -1964,6 +1968,9 @@ class DumpFULLV3Stats(Report):
                 output += " %12.6f" % (self.stats[3][i][4])
                 output += " %12.6f" % (self.stats[3][i][5])
                 output += " %12.6f" % (self.stats[3][i][6])
+                if len(self.stats[3][i]) > 8:
+                    output += " %12.6f" % (self.stats[3][i][7])
+                    output += " %12.6f" % (self.stats[3][i][8])
                 i += 1
             return output
 
@@ -1980,7 +1987,7 @@ class DumpFULLV4Stats(Report):
 
         for op_stats in self.result[3]:
             name = dbus_to_std(op_stats[0])
-            report[name] = {
+            entry = {
                 "details": {
                     "total": dbus_to_std(op_stats[1]),
                     "error": dbus_to_std(op_stats[2]),
@@ -1991,6 +1998,10 @@ class DumpFULLV4Stats(Report):
                     "max": dbus_to_std(op_stats[5])
                 }
             }
+            if len(op_stats) > 7:
+                entry["latency"]["e2e_average"] = dbus_to_std(op_stats[6])
+                entry["latency"]["send_average"] = dbus_to_std(op_stats[7])
+            report[name] = entry
 
     def __str__(self):
         output = ""
@@ -2007,7 +2018,7 @@ class DumpFULLV4Stats(Report):
             output += "Duration: " + "%.10f" % self.duration + " seconds\n"
             output += "\nOperation Details                            |  Operation Latency (in milliseconds)"
             output += "\n=============================================|========================================"
-            output += "\nName                        Total     Error  |       Avg          Min           Max   "
+            output += "\nName                        Total     Error  |       Avg          Min           Max        E2E       Send"
             i = 0
             tot_len = len(self.stats[3])
             while i < tot_len:
@@ -2017,6 +2028,9 @@ class DumpFULLV4Stats(Report):
                 output += " %12.6f" % (self.stats[3][i][3])
                 output += " %12.6f" % (self.stats[3][i][4])
                 output += " %12.6f" % (self.stats[3][i][5])
+                if len(self.stats[3][i]) > 7:
+                    output += " %12.6f" % (self.stats[3][i][6])
+                    output += " %12.6f" % (self.stats[3][i][7])
                 i += 1
             return output
 

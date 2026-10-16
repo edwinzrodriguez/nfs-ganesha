@@ -745,6 +745,8 @@ out:
 	case NFS4_OP_WRITE:
 	case NFS4_OP_READ_PLUS:
 	case NFS4_OP_WRITE_SAME:
+		if (nfs_param.core_param.enable_FULLV4STATS && data->req)
+			data->req->rq_stats_opcode = (int32_t)data->opcode;
 		server_stats_nfsv4_op_done(data->opcode, &op_ctx->start_time,
 					   *status);
 		break;

@@ -87,6 +87,14 @@ void server_stats_io_done(size_t requested, size_t transferred, bool success,
 void server_stats_compound_done(int num_ops, int status);
 void server_stats_nfsv4_op_done(int proto_op, struct timespec *start_time,
 				int status);
+
+/* Bit in svc_req.rq_stats_opcode marking NFSv3 proc (low 16 bits = proc) */
+#define RQ_STATS_OPCODE_V3_FLAG 0x10000
+
+/* ntirpc reply_done_cb: T4 after reply fully sent */
+void server_stats_nfs_reply_done(const struct timespec *stime,
+				 const struct timespec *reply_time, int opcode,
+				 int status);
 void server_stats_transport_done(struct gsh_client *client, uint64_t rx_bytes,
 				 uint64_t rx_pkt, uint64_t rx_err,
 				 uint64_t tx_bytes, uint64_t tx_pkt,

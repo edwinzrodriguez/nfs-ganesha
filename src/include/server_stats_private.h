@@ -387,12 +387,14 @@ struct auth_stats {
 #endif
 
 #ifdef _USE_NFS3
+/* name, total, errors, dups, avg, min, max, e2e_avg, send_avg */
 #define V3_FULL_REPLY \
-	{ .name = "v3_full_stats", .type = "a(stttddd)", .direction = "out" }
+	{ .name = "v3_full_stats", .type = "a(stttddddd)", .direction = "out" }
 #endif
 
+/* name, total, errors, avg, min, max, e2e_avg, send_avg */
 #define V4_FULL_REPLY \
-	{ .name = "v4_full_stats", .type = "a(sttddd)", .direction = "out" }
+	{ .name = "v4_full_stats", .type = "a(sttddddd)", .direction = "out" }
 
 #define AUTH_REPLY \
 	{ .name = "auth", .type = "a(tdddtdddtddd)", .direction = "out" }
