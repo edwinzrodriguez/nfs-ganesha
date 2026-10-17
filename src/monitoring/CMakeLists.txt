@@ -10,16 +10,29 @@ SET(ganesha_monitoring_SRCS
 add_library(ganesha_monitoring SHARED ${ganesha_monitoring_SRCS})
 
 if(LINUX)
+  # Prefer libproc2 (procps-ng >= 4.x); fall back to legacy libprocps.
+  find_library(LIBPROC2_LIB proc2)
+  find_path(LIBPROC2_INCLUDE_DIR NAMES libproc2/pids.h)
+  if(LIBPROC2_LIB AND LIBPROC2_INCLUDE_DIR)
+    target_link_libraries(ganesha_monitoring ${LIBPROC2_LIB})
+    target_include_directories(ganesha_monitoring PRIVATE ${LIBPROC2_INCLUDE_DIR})
+    target_compile_definitions(ganesha_monitoring PRIVATE HAVE_LIBPROC2)
+    message(STATUS "Found libproc2: ${LIBPROC2_LIB}")
+  else()
     find_library(PROCPS_LIB procps)
-    if(PROCPS_LIB)
-        target_link_libraries(ganesha_monitoring ${PROCPS_LIB})
-        add_definitions(-DHAVE_PROCPS)
+    find_path(PROCPS_INCLUDE_DIR NAMES proc/readproc.h)
+    if(PROCPS_LIB AND PROCPS_INCLUDE_DIR)
+      target_link_libraries(ganesha_monitoring ${PROCPS_LIB})
+      target_include_directories(ganesha_monitoring PRIVATE ${PROCPS_INCLUDE_DIR})
+      target_compile_definitions(ganesha_monitoring PRIVATE HAVE_PROCPS)
+      message(STATUS "Found procps: ${PROCPS_LIB}")
     else()
-        message(WARNING "procps library not found; please install procps lib for ganesha resource related metrics")
+      message(WARNING "Neither libproc2 nor procps found; ganesha resource metrics disabled. Install procps-ng-devel (libproc2) or procps/libprocps-dev.")
     endif()
+  endif()
 else()
-    # On non-Linux platforms, skip procps and warning
-    message(STATUS "Non-Linux platform detected; skipping procps library check")
+  # On non-Linux platforms, skip procps and warning
+  message(STATUS "Non-Linux platform detected; skipping procps library check")
 endif()
 
 
