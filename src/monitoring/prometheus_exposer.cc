@@ -50,7 +50,9 @@ extern "C" {
 #include <vector>
 #include <map>
 
-#ifdef HAVE_PROCPS
+#ifdef HAVE_LIBPROC2
+#include <libproc2/pids.h>
+#elif defined(HAVE_PROCPS)
 #include <proc/readproc.h>
 #endif
 
@@ -391,9 +393,9 @@ void *PrometheusExposer::server_thread(void *arg)
 		else
 			exposer->successLatencies_.Observe(elapsed_ms);
 
-#ifdef HAVE_PROCPS
-		if (nfs_param.core_param.enable_dynamic_metrics)
-			update_mem_info();
+#if defined(HAVE_PROCPS) || defined(HAVE_LIBPROC2)
+		/* No-op when dynamic metrics were not initialized. */
+		update_mem_info();
 #endif
 		update_export_mem();
 		gettimeofday(&current_time, nullptr);
@@ -433,20 +435,80 @@ void prometheus_exposer__stop(prometheus_registry_handle_t registry_handle)
 	stopped = true;
 }
 
-#ifdef HAVE_PROCPS
+#if defined(HAVE_LIBPROC2) || defined(HAVE_PROCPS)
 void update_mem_info()
 {
-	pid_t ganesha_pid;
-	ganesha_pid = getpid();
-	pid_t pids[] = { ganesha_pid, 0 };
+	struct ganesha_proc_mem_info mem_info;
+
+	memset(&mem_info, 0, sizeof(mem_info));
+
+#ifdef HAVE_LIBPROC2
+	enum pids_item items[] = {
+		PIDS_VM_RSS, PIDS_VM_SIZE, PIDS_VM_SWAP,
+		PIDS_TICS_USER, PIDS_TICS_SYSTEM, PIDS_TICS_BEGAN,
+	};
+	enum {
+		rel_vm_rss = 0,
+		rel_vm_size,
+		rel_vm_swap,
+		rel_tics_user,
+		rel_tics_system,
+		rel_tics_began,
+		rel_count,
+	};
+	struct pids_info *info = NULL;
+	struct pids_fetch *fetch;
+	unsigned int pid = (unsigned int)getpid();
+
+	if (procps_pids_new(&info, items, rel_count) < 0)
+		return;
+
+	fetch = procps_pids_select(info, &pid, 1, PIDS_SELECT_PID);
+	if (fetch == NULL || fetch->counts == NULL ||
+	    fetch->counts->total < 1 || fetch->stacks == NULL ||
+	    fetch->stacks[0] == NULL) {
+		procps_pids_unref(&info);
+		return;
+	}
+
+	mem_info.vm_rss =
+		PIDS_VAL(rel_vm_rss, ul_int, fetch->stacks[0], info);
+	mem_info.vm_size =
+		PIDS_VAL(rel_vm_size, ul_int, fetch->stacks[0], info);
+	mem_info.vm_swap =
+		PIDS_VAL(rel_vm_swap, ul_int, fetch->stacks[0], info);
+	mem_info.utime =
+		PIDS_VAL(rel_tics_user, ull_int, fetch->stacks[0], info);
+	mem_info.stime =
+		PIDS_VAL(rel_tics_system, ull_int, fetch->stacks[0], info);
+	mem_info.start_time =
+		PIDS_VAL(rel_tics_began, ull_int, fetch->stacks[0], info);
+
+	dynamic_metrics__mem_info(&mem_info);
+	procps_pids_unref(&info);
+#else /* HAVE_PROCPS */
+	pid_t pids[] = { getpid(), 0 };
 	PROCTAB *proc = openproc(PROC_FILLMEM | PROC_FILLSTATUS |
 					 PROC_FILLSTAT | PROC_PID,
 				 pids);
 	proc_t proc_info;
-	memset(&proc_info, 0, sizeof(proc_info));
 
-	if (readproc(proc, &proc_info) != NULL)
-		dynamic_metrics__mem_info(proc_info);
+	if (proc == NULL)
+		return;
+
+	memset(&proc_info, 0, sizeof(proc_info));
+	if (readproc(proc, &proc_info) != NULL) {
+		mem_info.vm_rss = proc_info.vm_rss;
+		mem_info.vm_size = proc_info.vm_size;
+		mem_info.vm_swap = proc_info.vm_swap;
+		mem_info.utime = proc_info.utime;
+		mem_info.stime = proc_info.stime;
+		mem_info.start_time = proc_info.start_time;
+		dynamic_metrics__mem_info(&mem_info);
+		freeproc(&proc_info);
+	}
+	closeproc(proc);
+#endif
 }
 #endif
 
