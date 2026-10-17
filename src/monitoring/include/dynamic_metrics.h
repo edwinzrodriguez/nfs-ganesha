@@ -55,15 +55,23 @@
 #include "gsh_types.h"
 #include "monitoring.h"
 
-#ifdef HAVE_PROCPS
-#include <proc/readproc.h>
-#endif
-
 #ifdef __cplusplus
 extern "C" {
 #endif
 
 typedef uint16_t export_id_t;
+
+#if defined(HAVE_PROCPS) || defined(HAVE_LIBPROC2)
+/* Process resource snapshot in /proc status units (KiB for memory fields). */
+struct ganesha_proc_mem_info {
+	unsigned long vm_rss; /* KiB */
+	unsigned long vm_size; /* KiB */
+	unsigned long vm_swap; /* KiB */
+	unsigned long long utime; /* clock ticks */
+	unsigned long long stime; /* clock ticks */
+	unsigned long long start_time; /* clock ticks since boot */
+};
+#endif
 
 #ifdef USE_MONITORING
 
@@ -104,8 +112,8 @@ void dynamic_metrics_export_info(const char *path, const uint64_t total_size,
 				 const uint64_t total_files,
 				 const uint64_t avail_files);
 
-#ifdef HAVE_PROCPS
-void dynamic_metrics__mem_info(proc_t proc_info);
+#if defined(HAVE_PROCPS) || defined(HAVE_LIBPROC2)
+void dynamic_metrics__mem_info(const struct ganesha_proc_mem_info *proc_info);
 #endif
 
 #else /* USE_MONITORING */
@@ -152,8 +160,9 @@ static inline void dynamic_metrics_export_info(
 {
 }
 
-#ifdef HAVE_PROCPS
-static inline void dynamic_metrics__mem_info(proc_t *UNUSED(proc_info))
+#if defined(HAVE_PROCPS) || defined(HAVE_LIBPROC2)
+static inline void
+dynamic_metrics__mem_info(const struct ganesha_proc_mem_info *UNUSED(proc_info))
 {
 }
 #endif
