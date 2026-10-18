@@ -426,6 +426,17 @@ fsal_status_t vfs_create_export(struct fsal_module *fsal_hdl, void *parse_node,
 		goto err_free;
 	}
 	myself->export.fsal = fsal_hdl;
+
+	/* Inherit module default when EXPORT FSAL omits IO_Busy_Delay_USec. */
+	if (myself->io_busy_delay_us == 0) {
+		struct vfs_fsal_module *mod = container_of(
+			fsal_hdl, struct vfs_fsal_module, module);
+
+		myself->io_busy_delay_us = mod->io_busy_delay_us;
+	}
+	LogInfo(COMPONENT_FSAL, "FSAL %s export IO_Busy_Delay_USec = %u",
+		fsal_hdl->name, myself->io_busy_delay_us);
+
 	vfs_sub_init_export_ops(myself, CTX_FULLPATH(op_ctx));
 
 	retval = fsal_attach_export(fsal_hdl, &myself->export.exports);
@@ -532,6 +543,19 @@ fsal_status_t vfs_update_export(struct fsal_module *fsal_hdl, void *parse_node,
 		LogCrit(COMPONENT_FSAL,
 			"Can not change async_hsm_restore without restart.");
 		invalid = true;
+	}
+
+	if (!invalid) {
+		if (myself.io_busy_delay_us == 0) {
+			struct vfs_fsal_module *mod = container_of(
+				fsal_hdl, struct vfs_fsal_module, module);
+
+			myself.io_busy_delay_us = mod->io_busy_delay_us;
+		}
+		orig->io_busy_delay_us = myself.io_busy_delay_us;
+		LogInfo(COMPONENT_FSAL,
+			"FSAL %s export IO_Busy_Delay_USec updated to %u",
+			fsal_hdl->name, orig->io_busy_delay_us);
 	}
 
 	return invalid ? posix2fsal_status(EINVAL)
