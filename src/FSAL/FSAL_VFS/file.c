@@ -1294,10 +1294,11 @@ void vfs_read2(struct fsal_obj_handle *obj_hdl, bool bypass,
 
 	my_fd = container_of(out_fd, struct vfs_fd, fsal_fd);
 
-	VFS_FSAL_TIME_CALL(VFS_STAT_READ,
-			   nb_read = preadv(my_fd->fd, read_arg->iov,
-					    read_arg->iov_count,
-					    read_arg->offset));
+	VFS_FSAL_TIME_CALL_BUSY(VFS_STAT_READ,
+				vfs_io_busy_delay(obj_hdl->fsal),
+				nb_read = preadv(my_fd->fd, read_arg->iov,
+						 read_arg->iov_count,
+						 read_arg->offset));
 
 	if (read_arg->offset == -1 || nb_read == -1) {
 		status = posix2fsal_status(errno);
@@ -1399,10 +1400,11 @@ void vfs_write2(struct fsal_obj_handle *obj_hdl, bool bypass,
 		goto out2;
 	}
 
-	VFS_FSAL_TIME_CALL(VFS_STAT_WRITE,
-			   nb_written = pwritev(my_fd->fd, write_arg->iov,
-						write_arg->iov_count,
-						write_arg->offset));
+	VFS_FSAL_TIME_CALL_BUSY(VFS_STAT_WRITE,
+				vfs_io_busy_delay(obj_hdl->fsal),
+				nb_written = pwritev(my_fd->fd, write_arg->iov,
+						     write_arg->iov_count,
+						     write_arg->offset));
 
 	if (nb_written == -1) {
 		status = posix2fsal_status(errno);
@@ -1414,8 +1416,9 @@ void vfs_write2(struct fsal_obj_handle *obj_hdl, bool bypass,
 	write_arg->io_amount = nb_written;
 
 	if (write_arg->fsal_stable) {
-		VFS_FSAL_TIME_CALL(VFS_STAT_FSYNC,
-				   retval = fsync(my_fd->fd));
+		VFS_FSAL_TIME_CALL_BUSY(VFS_STAT_FSYNC,
+					vfs_io_busy_delay(obj_hdl->fsal),
+					retval = fsync(my_fd->fd));
 		if (retval == -1) {
 			status2 = posix2fsal_status(errno);
 			write_arg->fsal_stable = false;
@@ -1612,8 +1615,8 @@ fsal_status_t vfs_fallocate(struct fsal_obj_handle *obj_hdl,
 		goto out;
 	}
 
-	VFS_FSAL_TIME_CALL(
-		VFS_STAT_FALLOCATE,
+	VFS_FSAL_TIME_CALL_BUSY(
+		VFS_STAT_FALLOCATE, vfs_io_busy_delay(obj_hdl->fsal),
 		ret = fallocate(my_fd->fd,
 				allocate ? 0
 					 : FALLOC_FL_KEEP_SIZE |
@@ -1700,7 +1703,9 @@ fsal_status_t vfs_commit2(struct fsal_obj_handle *obj_hdl, off_t offset,
 
 	my_fd = container_of(out_fd, struct vfs_fd, fsal_fd);
 
-	VFS_FSAL_TIME_CALL(VFS_STAT_FSYNC, retval = fsync(my_fd->fd));
+	VFS_FSAL_TIME_CALL_BUSY(VFS_STAT_FSYNC,
+				vfs_io_busy_delay(obj_hdl->fsal),
+				retval = fsync(my_fd->fd));
 
 	if (retval == -1)
 		status = posix2fsal_status(errno);

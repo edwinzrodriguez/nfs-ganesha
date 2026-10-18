@@ -75,4 +75,31 @@ void vfs_fsal_record_stats(enum vfs_stat_op op, uint64_t resp_time);
 		}                                                              \
 	} while (0)
 
+/**
+ * Like VFS_FSAL_TIME_CALL, but includes a post-I/O busy-wait in the
+ * measured interval (see vfs_io_busy_delay).
+ *
+ * Usage:
+ *   VFS_FSAL_TIME_CALL_BUSY(VFS_STAT_READ,
+ *                           vfs_io_busy_delay(obj_hdl->fsal),
+ *                           nb_read = preadv(...));
+ */
+#define VFS_FSAL_TIME_CALL_BUSY(op, busy, call)                                \
+	do {                                                                   \
+		if (nfs_param.core_param.enable_FSALSTATS) {                   \
+			struct timespec _vfs_stat_start, _vfs_stat_stop;       \
+			now(&_vfs_stat_start);                                 \
+			call;                                                  \
+			busy;                                                  \
+			now(&_vfs_stat_stop);                                  \
+			vfs_fsal_record_stats(                                 \
+				(op),                                          \
+				timespec_diff(&_vfs_stat_start,                \
+					      &_vfs_stat_stop));               \
+		} else {                                                       \
+			call;                                                  \
+			busy;                                                  \
+		}                                                              \
+	} while (0)
+
 #endif /* FSAL_VFS_STATS_H */

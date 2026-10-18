@@ -83,7 +83,8 @@ static struct vfs_fsal_module XFS = {
 			.expire_time_parent = -1,
 		}
 	},
-	.only_one_user = false
+	.only_one_user = false,
+	.io_busy_delay_us = 0
 };
 
 static struct config_item xfs_params[] = {
@@ -101,6 +102,8 @@ static struct config_item xfs_params[] = {
 	CONF_ITEM_BOOL("auth_xdev_export", false, vfs_fsal_module,
 		       module.fs_info.auth_exportpath_xdev),
 	CONF_ITEM_BOOL("only_one_user", false, vfs_fsal_module, only_one_user),
+	CONF_ITEM_UI32("IO_Busy_Delay_USec", 0, 10000000, 0, vfs_fsal_module,
+		       io_busy_delay_us),
 	CONFIG_EOL
 };
 
@@ -183,6 +186,8 @@ static fsal_status_t init_config(struct fsal_module *xfs_fsal_module,
 				     true, err_type);
 	if (!config_error_is_harmless(err_type))
 		return fsalstat(ERR_FSAL_INVAL, 0);
+	LogInfo(COMPONENT_FSAL, "FSAL_XFS IO_Busy_Delay_USec = %u",
+		xfs_module->io_busy_delay_us);
 	display_fsinfo(&xfs_module->module);
 	LogFullDebug(COMPONENT_FSAL,
 		     "Supported attributes constant = 0x%" PRIx64,
