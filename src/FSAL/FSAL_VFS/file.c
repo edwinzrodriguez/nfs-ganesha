@@ -41,6 +41,7 @@
 #include <fcntl.h>
 #include <sys/uio.h>
 #include "vfs_methods.h"
+#include "vfs_stats.h"
 #include "os/subr.h"
 #include "sal_data.h"
 #include "../fsal_private.h"
@@ -63,7 +64,8 @@ fsal_status_t vfs_open_my_fd(struct vfs_fsal_obj_handle *myself,
 	LogFullDebug(COMPONENT_FSAL, "openflags = %x, posix_flags = %x",
 		     openflags, posix_flags);
 
-	fd = vfs_fsal_open(myself, posix_flags, &fsal_error);
+	VFS_FSAL_TIME_CALL(VFS_STAT_OPEN,
+			   fd = vfs_fsal_open(myself, posix_flags, &fsal_error));
 
 	if (fd < 0) {
 		retval = -fd;
@@ -93,7 +95,7 @@ fsal_status_t vfs_close_my_fd(struct vfs_fd *my_fd)
 			COMPONENT_FSAL,
 			"Closing Opened fd %d for fsal_fd(%p) with type(%d)",
 			my_fd->fd, &my_fd->fsal_fd, my_fd->fsal_fd.fd_type);
-		retval = close(my_fd->fd);
+		VFS_FSAL_TIME_CALL(VFS_STAT_CLOSE, retval = close(my_fd->fd));
 		if (retval < 0) {
 			retval = errno;
 			fsal_error = posix2fsal_error(retval);
@@ -137,14 +139,16 @@ fsal_status_t vfs_reopen_func(struct fsal_obj_handle *obj_hdl,
 		     "my_fd->fd = %d openflags = %x, posix_flags = %x",
 		     my_fd->fd, openflags, posix_flags);
 
-	fd = vfs_fsal_open(myself, posix_flags, &fsal_error);
+	VFS_FSAL_TIME_CALL(VFS_STAT_OPEN,
+			   fd = vfs_fsal_open(myself, posix_flags, &fsal_error));
 
 	if (fd < 0) {
 		retval = -fd;
 	} else {
 		if (my_fd->fd != -1) {
 			/* File was previously open, close old fd */
-			retval = close(my_fd->fd);
+			VFS_FSAL_TIME_CALL(VFS_STAT_CLOSE,
+					   retval = close(my_fd->fd));
 
 			if (retval < 0) {
 				retval = errno;
@@ -319,26 +323,30 @@ static fsal_status_t fetch_attrs(struct vfs_fsal_obj_handle *myself, int my_fd,
 	case SOCKET_FILE:
 	case CHARACTER_FILE:
 	case BLOCK_FILE:
-		retval = fstatat(my_fd, myself->u.unopenable.name, &stat,
-				 AT_SYMLINK_NOFOLLOW);
+		VFS_FSAL_TIME_CALL(
+			VFS_STAT_GETATTR,
+			retval = fstatat(my_fd, myself->u.unopenable.name,
+					 &stat, AT_SYMLINK_NOFOLLOW));
 		func = "fstatat";
 		break;
 
 	case REGULAR_FILE:
-		retval = fstat(my_fd, &stat);
+		VFS_FSAL_TIME_CALL(VFS_STAT_GETATTR, retval = fstat(my_fd, &stat));
 		func = "fstat";
 		break;
 
 	case SYMBOLIC_LINK:
 #ifdef __FreeBSD__
 		handle = v_to_fhandle(myself->handle->handle_data);
-		retval = fhstat(handle, &stat);
+		VFS_FSAL_TIME_CALL(VFS_STAT_GETATTR,
+				   retval = fhstat(handle, &stat));
 		func = "fhstat";
 		break;
 #endif
 	case FIFO_FILE:
 	case DIRECTORY:
-		retval = vfs_stat_by_handle(my_fd, &stat);
+		VFS_FSAL_TIME_CALL(VFS_STAT_GETATTR,
+				   retval = vfs_stat_by_handle(my_fd, &stat));
 		func = "vfs_stat_by_handle";
 		break;
 
@@ -787,9 +795,12 @@ fsal_status_t vfs_open2(struct fsal_obj_handle *obj_hdl, struct state_t *state,
 		}
 
 	if ((posix_flags & O_CREAT) != 0)
-		fd = openat(dir_fd, name, posix_flags, unix_mode);
+		VFS_FSAL_TIME_CALL(
+			VFS_STAT_CREATE,
+			fd = openat(dir_fd, name, posix_flags, unix_mode));
 	else
-		fd = openat(dir_fd, name, posix_flags);
+		VFS_FSAL_TIME_CALL(VFS_STAT_OPEN,
+				   fd = openat(dir_fd, name, posix_flags));
 
 	if (fd == -1 && errno == EEXIST && createmode == FSAL_UNCHECKED) {
 		/* We tried to create O_EXCL to set attributes and failed.
@@ -802,7 +813,9 @@ fsal_status_t vfs_open2(struct fsal_obj_handle *obj_hdl, struct state_t *state,
 		 * the condition of not wanting to set attributes.
 		 */
 		posix_flags &= ~O_EXCL;
-		fd = openat(dir_fd, name, posix_flags, unix_mode);
+		VFS_FSAL_TIME_CALL(
+			VFS_STAT_CREATE,
+			fd = openat(dir_fd, name, posix_flags, unix_mode));
 
 		/* Preserve errno */
 		retval = errno;
@@ -1281,8 +1294,10 @@ void vfs_read2(struct fsal_obj_handle *obj_hdl, bool bypass,
 
 	my_fd = container_of(out_fd, struct vfs_fd, fsal_fd);
 
-	nb_read = preadv(my_fd->fd, read_arg->iov, read_arg->iov_count,
-			 read_arg->offset);
+	VFS_FSAL_TIME_CALL(VFS_STAT_READ,
+			   nb_read = preadv(my_fd->fd, read_arg->iov,
+					    read_arg->iov_count,
+					    read_arg->offset));
 
 	if (read_arg->offset == -1 || nb_read == -1) {
 		status = posix2fsal_status(errno);
@@ -1384,8 +1399,10 @@ void vfs_write2(struct fsal_obj_handle *obj_hdl, bool bypass,
 		goto out2;
 	}
 
-	nb_written = pwritev(my_fd->fd, write_arg->iov, write_arg->iov_count,
-			     write_arg->offset);
+	VFS_FSAL_TIME_CALL(VFS_STAT_WRITE,
+			   nb_written = pwritev(my_fd->fd, write_arg->iov,
+						write_arg->iov_count,
+						write_arg->offset));
 
 	if (nb_written == -1) {
 		status = posix2fsal_status(errno);
@@ -1397,7 +1414,8 @@ void vfs_write2(struct fsal_obj_handle *obj_hdl, bool bypass,
 	write_arg->io_amount = nb_written;
 
 	if (write_arg->fsal_stable) {
-		retval = fsync(my_fd->fd);
+		VFS_FSAL_TIME_CALL(VFS_STAT_FSYNC,
+				   retval = fsync(my_fd->fd));
 		if (retval == -1) {
 			status2 = posix2fsal_status(errno);
 			write_arg->fsal_stable = false;
@@ -1594,10 +1612,13 @@ fsal_status_t vfs_fallocate(struct fsal_obj_handle *obj_hdl,
 		goto out;
 	}
 
-	ret = fallocate(my_fd->fd,
-			allocate ? 0
-				 : FALLOC_FL_KEEP_SIZE | FALLOC_FL_PUNCH_HOLE,
-			offset, length);
+	VFS_FSAL_TIME_CALL(
+		VFS_STAT_FALLOCATE,
+		ret = fallocate(my_fd->fd,
+				allocate ? 0
+					 : FALLOC_FL_KEEP_SIZE |
+						   FALLOC_FL_PUNCH_HOLE,
+				offset, length));
 
 	if (ret < 0) {
 		ret = errno;
@@ -1679,7 +1700,7 @@ fsal_status_t vfs_commit2(struct fsal_obj_handle *obj_hdl, off_t offset,
 
 	my_fd = container_of(out_fd, struct vfs_fd, fsal_fd);
 
-	retval = fsync(my_fd->fd);
+	VFS_FSAL_TIME_CALL(VFS_STAT_FSYNC, retval = fsync(my_fd->fd));
 
 	if (retval == -1)
 		status = posix2fsal_status(errno);
@@ -1826,7 +1847,9 @@ fsal_status_t vfs_lock_op2(struct fsal_obj_handle *obj_hdl,
 	my_fd = container_of(out_fd, struct vfs_fd, fsal_fd);
 
 	errno = 0;
-	retval = fcntl(my_fd->fd, fcntl_comm, &lock_args);
+	VFS_FSAL_TIME_CALL(
+		lock_op == FSAL_OP_LOCKT ? VFS_STAT_GETLK : VFS_STAT_SETLK,
+		retval = fcntl(my_fd->fd, fcntl_comm, &lock_args));
 
 	if (retval) {
 		retval = errno;
@@ -2135,7 +2158,9 @@ fsal_status_t vfs_setattr2(struct fsal_obj_handle *obj_hdl, bool bypass,
 		}
 #endif
 
-		retval = ftruncate(my_fd->fd, attrib_set->filesize);
+		VFS_FSAL_TIME_CALL(
+			VFS_STAT_SETATTR,
+			retval = ftruncate(my_fd->fd, attrib_set->filesize));
 
 		if (retval != 0) {
 			/** @todo FSF: is this still necessary?
@@ -2155,7 +2180,10 @@ fsal_status_t vfs_setattr2(struct fsal_obj_handle *obj_hdl, bool bypass,
 			/** @todo FSF: re-open if we really still need this
 			 */
 
-			retval = ftruncate(my_fd->fd, attrib_set->filesize);
+			VFS_FSAL_TIME_CALL(
+				VFS_STAT_SETATTR,
+				retval = ftruncate(my_fd->fd,
+						   attrib_set->filesize));
 			if (retval != 0) {
 				func = "truncate";
 				goto fileerr;
@@ -2170,13 +2198,20 @@ fsal_status_t vfs_setattr2(struct fsal_obj_handle *obj_hdl, bool bypass,
 		 */
 		if (obj_hdl->type != SYMBOLIC_LINK) {
 			if (vfs_unopenable_type(obj_hdl->type))
-				retval = fchmodat(
-					my_fd->fd, myself->u.unopenable.name,
-					fsal2unix_mode(attrib_set->mode), 0);
+				VFS_FSAL_TIME_CALL(
+					VFS_STAT_SETATTR,
+					retval = fchmodat(
+						my_fd->fd,
+						myself->u.unopenable.name,
+						fsal2unix_mode(attrib_set->mode),
+						0));
 			else
-				retval = fchmod(my_fd->fd,
+				VFS_FSAL_TIME_CALL(
+					VFS_STAT_SETATTR,
+					retval = fchmod(
+						my_fd->fd,
 						fsal2unix_mode(
-							attrib_set->mode));
+							attrib_set->mode)));
 
 			if (retval != 0) {
 				func = "chmod";
@@ -2195,13 +2230,22 @@ fsal_status_t vfs_setattr2(struct fsal_obj_handle *obj_hdl, bool bypass,
 				      : -1;
 
 		if (vfs_unopenable_type(obj_hdl->type))
-			retval = fchownat(my_fd->fd, myself->u.unopenable.name,
-					  user, group, AT_SYMLINK_NOFOLLOW);
+			VFS_FSAL_TIME_CALL(
+				VFS_STAT_SETATTR,
+				retval = fchownat(my_fd->fd,
+						  myself->u.unopenable.name,
+						  user, group,
+						  AT_SYMLINK_NOFOLLOW));
 		else if (obj_hdl->type == SYMBOLIC_LINK)
-			retval = fchownat(my_fd->fd, "", user, group,
-					  AT_SYMLINK_NOFOLLOW | AT_EMPTY_PATH);
+			VFS_FSAL_TIME_CALL(
+				VFS_STAT_SETATTR,
+				retval = fchownat(
+					my_fd->fd, "", user, group,
+					AT_SYMLINK_NOFOLLOW | AT_EMPTY_PATH));
 		else
-			retval = fchown(my_fd->fd, user, group);
+			VFS_FSAL_TIME_CALL(
+				VFS_STAT_SETATTR,
+				retval = fchown(my_fd->fd, user, group));
 
 		if (retval) {
 			func = "chown";

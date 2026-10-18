@@ -32,9 +32,17 @@ SET(fsalvfs_LIB_SRCS_common
    ../vfs_methods.h
    ../state.c
    ../subfsal_helpers.c
+   ../fsal_stats_vfs.c
+   ../vfs_stats.h
    subfsal_vfs.c
    attrs.c
 )
+
+if(USE_DBUS)
+  include_directories(
+    ${DBUS_INCLUDE_DIRS}
+  )
+endif(USE_DBUS)
 
 set(fsalvfs_OBJS
     $<TARGET_OBJECTS:fsal_os>
