@@ -47,6 +47,7 @@
 #include "FSAL/fsal_commonlib.h"
 #include "FSAL/fsal_localfs.h"
 #include "vfs_methods.h"
+#include "vfs_stats.h"
 #include <os/subr.h>
 #include "os/xattr.h"
 #include "subfsal.h"
@@ -527,7 +528,10 @@ static fsal_status_t lookup(struct fsal_obj_handle *parent, const char *path,
 		return status;
 	}
 
-	status = lookup_with_fd(parent_hdl, dirfd, path, handle, attrs_out);
+	VFS_FSAL_TIME_CALL(
+		VFS_STAT_LOOKUP,
+		status = lookup_with_fd(parent_hdl, dirfd, path, handle,
+					attrs_out));
 
 	close(dirfd);
 	return status;
@@ -627,7 +631,8 @@ static fsal_status_t makedir(struct fsal_obj_handle *dir_hdl, const char *name,
 		goto direrr;
 	}
 
-	retval = mkdirat(dir_fd, name, unix_mode);
+	VFS_FSAL_TIME_CALL(VFS_STAT_MKDIR,
+			   retval = mkdirat(dir_fd, name, unix_mode));
 	if (retval < 0) {
 		retval = errno;
 		vfs_restore_ganesha_credentials(dir_hdl->fsal);
@@ -842,7 +847,8 @@ static fsal_status_t makenode(struct fsal_obj_handle *dir_hdl, const char *name,
 		goto direrr;
 	}
 
-	retval = mknodat(dir_fd, name, unix_mode, unix_dev);
+	VFS_FSAL_TIME_CALL(VFS_STAT_MKNOD,
+			   retval = mknodat(dir_fd, name, unix_mode, unix_dev));
 
 	if (retval < 0) {
 		retval = errno;
@@ -1039,7 +1045,8 @@ static fsal_status_t makesymlink(struct fsal_obj_handle *dir_hdl,
 		goto direrr;
 	}
 
-	retval = symlinkat(link_path, dir_fd, name);
+	VFS_FSAL_TIME_CALL(VFS_STAT_SYMLINK,
+			   retval = symlinkat(link_path, dir_fd, name));
 
 	if (retval < 0) {
 		retval = errno;
@@ -1162,7 +1169,8 @@ static fsal_status_t readsymlink(struct fsal_obj_handle *obj_hdl,
 		goto hdlerr;
 	}
 	if (refresh) { /* lazy load or LRU'd storage */
-		retval = vfs_readlink(myself, &fsal_error);
+		VFS_FSAL_TIME_CALL(VFS_STAT_READLINK,
+				   retval = vfs_readlink(myself, &fsal_error));
 		if (retval < 0) {
 			retval = -retval;
 			goto hdlerr;
@@ -1301,7 +1309,10 @@ static fsal_status_t linkfile(struct fsal_obj_handle *obj_hdl,
 		goto no_destdir;
 	}
 
-	retval = vfs_link_by_handle(myself->handle, my_fd->fd, destdirfd, name);
+	VFS_FSAL_TIME_CALL(
+		VFS_STAT_LINK,
+		retval = vfs_link_by_handle(myself->handle, my_fd->fd,
+					    destdirfd, name));
 
 	if (retval < 0) {
 		retval = errno;
@@ -1552,7 +1563,9 @@ static fsal_status_t renamefile(struct fsal_obj_handle *obj_hdl,
 		fsal_error = posix2fsal_error(retval);
 		goto out;
 	}
-	retval = renameat(oldfd, old_name, newfd, new_name);
+	VFS_FSAL_TIME_CALL(
+		VFS_STAT_RENAME,
+		retval = renameat(oldfd, old_name, newfd, new_name));
 	if (retval < 0) {
 		retval = errno;
 		fsal_error = posix2fsal_error(retval);
@@ -1635,7 +1648,10 @@ static fsal_status_t file_unlink(struct fsal_obj_handle *dir_hdl,
 		goto errout;
 	}
 
-	retval = unlinkat(fd, name, (S_ISDIR(stat.st_mode)) ? AT_REMOVEDIR : 0);
+	VFS_FSAL_TIME_CALL(
+		S_ISDIR(stat.st_mode) ? VFS_STAT_RMDIR : VFS_STAT_UNLINK,
+		retval = unlinkat(fd, name,
+				  (S_ISDIR(stat.st_mode)) ? AT_REMOVEDIR : 0));
 	if (retval < 0) {
 		retval = errno;
 		if (retval == ENOENT)
@@ -1750,8 +1766,10 @@ static fsal_status_t vfs_getxattrs(struct fsal_obj_handle *obj_hdl,
 		return fsalstat(fsal_error, -fd);
 	}
 
-	rc = fgetxattr(fd, name, xa_value->utf8string_val,
-		       xa_value->utf8string_len);
+	VFS_FSAL_TIME_CALL(
+		VFS_STAT_GETXATTR,
+		rc = fgetxattr(fd, name, xa_value->utf8string_val,
+			       xa_value->utf8string_len));
 	err = errno; /* save errno before close() */
 	close(fd);
 	if (rc < 0) {
@@ -1808,10 +1826,13 @@ static fsal_status_t vfs_setxattrs(struct fsal_obj_handle *obj_hdl,
 		break;
 	}
 	if (xa_value->utf8string_len == 0) {
-		rc = fsetxattr(fd, name, "", 1, flags);
+		VFS_FSAL_TIME_CALL(VFS_STAT_SETXATTR,
+				   rc = fsetxattr(fd, name, "", 1, flags));
 	} else {
-		rc = fsetxattr(fd, name, xa_value->utf8string_val,
-			       xa_value->utf8string_len, flags);
+		VFS_FSAL_TIME_CALL(
+			VFS_STAT_SETXATTR,
+			rc = fsetxattr(fd, name, xa_value->utf8string_val,
+				       xa_value->utf8string_len, flags));
 	}
 	err = errno; /* save errno before close() */
 	close(fd);
@@ -1853,7 +1874,8 @@ static fsal_status_t vfs_removexattrs(struct fsal_obj_handle *obj_hdl,
 		LogDebug(COMPONENT_FSAL, "vfs_open_fsal returned %d", fd);
 		return fsalstat(fsal_error, -fd);
 	}
-	rc = fremovexattr(fd, name);
+	VFS_FSAL_TIME_CALL(VFS_STAT_REMOVEXATTR,
+			   rc = fremovexattr(fd, name));
 	err = errno; /* save errno before close() */
 	close(fd);
 	if (rc < 0) {
@@ -1890,7 +1912,8 @@ static fsal_status_t vfs_listxattrs(struct fsal_obj_handle *obj_hdl,
 		LogDebug(COMPONENT_FSAL, "vfs_open_fsal returned %d", fd);
 		return fsalstat(fsal_error, -fd);
 	}
-	listsize = flistxattr(fd, names, sizeof(names));
+	VFS_FSAL_TIME_CALL(VFS_STAT_LISTXATTR,
+			   listsize = flistxattr(fd, names, sizeof(names)));
 	err = errno; /* save errno before close() */
 	close(fd);
 	if (listsize < 0) {
