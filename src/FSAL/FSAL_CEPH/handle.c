@@ -1772,6 +1772,9 @@ struct ceph_fsal_cb_info {
 	struct ceph_fd temp_fd;
 	bool async;
 	bool zerocopy;
+	/* FSALSTATS: e2e latency from nonblocking submit to first callback */
+	struct timespec stat_start;
+	bool stat_timing;
 };
 
 void ceph_read2_cb(struct ceph_ll_io_info *cb_info)
@@ -1843,6 +1846,12 @@ void ceph_read2_cb(struct ceph_ll_io_info *cb_info)
 #endif
 		LogFullDebug(COMPONENT_FSAL, "Read returned %" PRIu64,
 			     cb_info->result);
+	}
+
+	/* Record e2e FSAL READ latency once (not on CLOSEFD resume). */
+	if (cbi->stat_timing) {
+		ceph_fsal_stat_finish(CEPH_STAT_READ, &cbi->stat_start, true);
+		cbi->stat_timing = false;
 	}
 
 	if (cbi->async && cbi->my_fd->fsal_fd.close_on_complete) {
@@ -2027,18 +2036,25 @@ static void ceph_fsal_read2(struct fsal_obj_handle *obj_hdl, bool bypass,
 	LogFullDebug(COMPONENT_FSAL,
 		     "Calling ceph_ll_nonblocking_readv_writev for read");
 
+	ceph_fsal_stat_start(&cbi->stat_start, &cbi->stat_timing);
 	result =
 		ceph_ll_nonblocking_readv_writev(export->cmount, &cbi->io_info);
 
 	if (result < 0) {
 		/* An error occurred. */
 		status = ceph2fsal_error(result);
+		ceph_fsal_stat_finish(CEPH_STAT_READ, &cbi->stat_start,
+				      cbi->stat_timing);
+		cbi->stat_timing = false;
 	} else if (result == 0) {
-		/* I/O will complete async, return. */
+		/* I/O will complete async; callback records FSAL READ. */
 		return;
 	} else {
 		/* I/O actually completed... */
 		read_arg->io_amount = result;
+		ceph_fsal_stat_finish(CEPH_STAT_READ, &cbi->stat_start,
+				      cbi->stat_timing);
+		cbi->stat_timing = false;
 	}
 
 	GSH_UNIQUE_AUTO_TRACEPOINT(fsal_ceph, ceph_read, TRACE_DEBUG,
@@ -2167,6 +2183,12 @@ void ceph_write2_cb(struct ceph_ll_io_info *cb_info)
 
 		LogFullDebug(COMPONENT_FSAL, "Write returned %" PRIu64,
 			     cb_info->result);
+	}
+
+	/* Record e2e FSAL WRITE latency once (not on CLOSEFD resume). */
+	if (cbi->stat_timing) {
+		ceph_fsal_stat_finish(CEPH_STAT_WRITE, &cbi->stat_start, true);
+		cbi->stat_timing = false;
 	}
 
 	if (cbi->my_fd->fsal_fd.close_on_complete) {
@@ -2326,6 +2348,7 @@ static void ceph_fsal_write2(struct fsal_obj_handle *obj_hdl, bool bypass,
 	LogFullDebug(COMPONENT_FSAL,
 		     "Calling ceph_ll_nonblocking_readv_writev for write");
 
+	ceph_fsal_stat_start(&cbi->stat_start, &cbi->stat_timing);
 	result =
 		ceph_ll_nonblocking_readv_writev(export->cmount, &cbi->io_info);
 
@@ -2338,12 +2361,18 @@ static void ceph_fsal_write2(struct fsal_obj_handle *obj_hdl, bool bypass,
 	if (result < 0) {
 		/* An error occurred. */
 		status = ceph2fsal_error(result);
+		ceph_fsal_stat_finish(CEPH_STAT_WRITE, &cbi->stat_start,
+				      cbi->stat_timing);
+		cbi->stat_timing = false;
 	} else if (result == 0) {
-		/* I/O will complete async, return. */
+		/* I/O will complete async; callback records FSAL WRITE. */
 		return;
 	} else {
 		/* I/O actually completed... */
 		write_arg->io_amount = result;
+		ceph_fsal_stat_finish(CEPH_STAT_WRITE, &cbi->stat_start,
+				      cbi->stat_timing);
+		cbi->stat_timing = false;
 	}
 	goto out;
 
