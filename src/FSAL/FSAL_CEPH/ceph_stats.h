@@ -79,4 +79,30 @@ void ceph_fsal_record_stats(enum ceph_stat_op op, uint64_t resp_time);
 		}                                                              \
 	} while (0)
 
+/**
+ * Start timing for an async FSAL op (submit → callback). Sets *active when
+ * FSALSTATS is enabled so the finish helper can no-op cheaply otherwise.
+ */
+static inline void ceph_fsal_stat_start(struct timespec *start, bool *active)
+{
+	*active = nfs_param.core_param.enable_FSALSTATS;
+	if (*active)
+		now(start);
+}
+
+/**
+ * Finish timing for an async FSAL op and record into @op.
+ */
+static inline void ceph_fsal_stat_finish(enum ceph_stat_op op,
+					 const struct timespec *start,
+					 bool active)
+{
+	struct timespec stop;
+
+	if (!active)
+		return;
+	now(&stop);
+	ceph_fsal_record_stats(op, timespec_diff(start, &stop));
+}
+
 #endif /* FSAL_CEPH_STATS_H */
