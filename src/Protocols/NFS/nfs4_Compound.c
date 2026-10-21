@@ -861,7 +861,7 @@ enum nfs_req_result process_one_op(compound_data_t *data, nfsstat4 *status)
 		}
 	}
 
-	/* time each op (monotonic; matches op_ctx->start_time / rq_stime) */
+	/* Fine CLOCK_MONOTONIC; same clock as op_ctx->start_time / rq_stime */
 	now_mono(&data->op_start_time);
 
 	if (data->minorversion > 0 && data->session != NULL &&

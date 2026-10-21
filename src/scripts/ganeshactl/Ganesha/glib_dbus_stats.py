@@ -2045,7 +2045,7 @@ class DumpFULLV4Stats(Report):
                 i += 1
             return output
 
-<<<<<<< HEAD
+
 class RetrieveMemoryStats():
     def __init__(self):
         self.dbus_service_name = "org.ganesha.nfsd"

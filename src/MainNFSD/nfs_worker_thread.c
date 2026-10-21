@@ -1107,8 +1107,9 @@ static enum xprt_stat nfs_rpc_process_request(nfs_request_t *reqdata,
 	export_check_access();
 
 	/* start the processing clock
-	 * Prefer ntirpc's early recv stamp (CLOCK_MONOTONIC_FAST via rq_stime)
-	 * so latency includes SVC_RECV/decode. Fall back to monotonic now.
+	 * Prefer ntirpc's early recv stamp (fine CLOCK_MONOTONIC via rq_stime)
+	 * so latency includes SVC_RECV/decode and matches now_mono() resolution.
+	 * Fall back to now_mono() if unset.
 	 */
 	if (reqdata->svc.rq_stime.tv_sec != 0)
 		op_ctx->start_time = reqdata->svc.rq_stime;
