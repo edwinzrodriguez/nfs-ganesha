@@ -1697,6 +1697,7 @@ bool rpc_init_or_update(void)
 	svc_params.alloc_cb = alloc_nfs_request;
 	svc_params.free_cb = free_nfs_request;
 	svc_params.reply_done_cb = server_stats_nfs_reply_done;
+	svc_params.stage_timing = nfs_param.core_param.enable_IOSTAGES;
 	svc_params.flags = SVC_INIT_EPOLL; /* use EPOLL event mgmt */
 	svc_params.flags |= SVC_INIT_NOREG_XPRTS; /* don't call xprt_register */
 	svc_params.max_connections = nfs_param.core_param.rpc.max_connections;
