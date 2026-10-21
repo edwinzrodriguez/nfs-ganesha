@@ -37,6 +37,8 @@
 #include "mdcache_int.h"
 #include "mdcache_lru.h"
 #include "mdcache.h"
+#include "io_stages.h"
+#include "nfs_proto_data.h"
 
 /**
  * @brief Callback arg for MDCACHE async callbacks
@@ -48,6 +50,10 @@ struct mdc_async_arg {
 	struct fsal_obj_handle *obj_hdl; /**< MDCACHE's handle */
 	fsal_async_cb cb; /**< Wrapped callback */
 	void *cb_arg; /**< Wrapped callback data */
+	/** Request stage stamps; CEPH async cb uses a fresh op_ctx without
+	 *  nfs_reqdata, so T08 must not rely on op_ctx in the callback.
+	 */
+	struct io_stage_timing *stages;
 };
 
 /**
@@ -563,6 +569,9 @@ static void mdc_read_super_cb(struct fsal_obj_handle *obj, fsal_status_t ret,
 static void mdc_read_cb(struct fsal_obj_handle *obj, fsal_status_t ret,
 			void *obj_data, void *caller_data)
 {
+	struct mdc_async_arg *arg = caller_data;
+
+	io_stage_stamp(arg->stages, IO_STAGE_T08_FSAL_DONE);
 	supercall(mdc_read_super_cb(obj, ret, obj_data, caller_data););
 }
 
@@ -593,6 +602,10 @@ void mdcache_read2(struct fsal_obj_handle *obj_hdl, bool bypass,
 	arg->obj_hdl = obj_hdl;
 	arg->cb = done_cb;
 	arg->cb_arg = caller_arg;
+	if (op_ctx && op_ctx->nfs_reqdata)
+		arg->stages = &op_ctx->nfs_reqdata->io_stages;
+
+	io_stage_stamp(arg->stages, IO_STAGE_T07_FSAL_ENTER);
 
 	subcall(entry->sub_handle->obj_ops->read2(entry->sub_handle, bypass,
 						  mdc_read_cb, read_arg, arg));
@@ -653,6 +666,9 @@ static void mdc_write_super_cb(struct fsal_obj_handle *obj, fsal_status_t ret,
 static void mdc_write_cb(struct fsal_obj_handle *obj, fsal_status_t ret,
 			 void *obj_data, void *caller_data)
 {
+	struct mdc_async_arg *arg = caller_data;
+
+	io_stage_stamp(arg->stages, IO_STAGE_T08_FSAL_DONE);
 	supercall(mdc_write_super_cb(obj, ret, obj_data, caller_data););
 }
 
@@ -680,6 +696,10 @@ void mdcache_write2(struct fsal_obj_handle *obj_hdl, bool bypass,
 	arg->obj_hdl = obj_hdl;
 	arg->cb = done_cb;
 	arg->cb_arg = caller_arg;
+	if (op_ctx && op_ctx->nfs_reqdata)
+		arg->stages = &op_ctx->nfs_reqdata->io_stages;
+
+	io_stage_stamp(arg->stages, IO_STAGE_T07_FSAL_ENTER);
 
 	subcall(entry->sub_handle->obj_ops->write2(
 		entry->sub_handle, bypass, mdc_write_cb, write_arg, arg));

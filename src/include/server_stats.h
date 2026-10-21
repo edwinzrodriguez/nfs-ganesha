@@ -57,14 +57,20 @@ void server_stats_nfsv4_op_done(int proto_op, struct timespec *start_time,
 /* Bit in svc_req.rq_stats_opcode marking NFSv3 proc (low 16 bits = proc) */
 #define RQ_STATS_OPCODE_V3_FLAG 0x10000
 
-/* ntirpc reply_done_cb: T4 after reply fully sent */
+/* ntirpc reply_done_cb: T4 after reply fully sent; stage_t10_ns for T11 */
 void server_stats_nfs_reply_done(const struct timespec *stime,
 				 const struct timespec *reply_time, int opcode,
-				 int status);
+				 int status, uint64_t stage_t10_ns);
 void server_stats_transport_done(struct gsh_client *client, uint64_t rx_bytes,
 				 uint64_t rx_pkt, uint64_t rx_err,
 				 uint64_t tx_bytes, uint64_t tx_pkt,
 				 uint64_t tx_err);
+
+/* I/O path stage timings (Enable_IOStages) */
+void server_stats_io_stages_done(struct nfs_request *req);
+void server_stats_io_stages_reply_done(uint64_t t10_ns);
+void server_stats_io_stages_reset(void);
+extern struct timespec io_stages_stats_time;
 
 /* For delegations */
 void inc_grants(struct gsh_client *client);

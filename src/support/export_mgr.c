@@ -937,6 +937,7 @@ void nfs_init_stats_time(void)
 	now(&nfs_stats_time);
 	fsal_stats_time = v3_full_stats_time = v4_full_stats_time =
 		auth_stats_time = clnt_allops_stats_time = nfs_stats_time;
+	io_stages_stats_time = nfs_stats_time;
 }
 
 #ifdef USE_DBUS
@@ -2258,6 +2259,7 @@ static bool stats_reset(DBusMessageIter *args, DBusMessage *reply,
 	reset_fsal_stats();
 	reset_server_stats();
 	reset_auth_stats();
+	server_stats_io_stages_reset();
 
 	/* update the stats counting time */
 	nfs_init_stats_time();
@@ -2333,6 +2335,36 @@ static struct gsh_dbus_method v4_full_statistics = {
 };
 
 /**
+ * DBUS method to get I/O path stage timings
+ */
+static bool stats_io_stages(DBusMessageIter *args, DBusMessage *reply,
+			    DBusError *error)
+{
+	bool success = true;
+	char *errormsg = "OK";
+	DBusMessageIter iter;
+
+	dbus_message_iter_init_append(reply, &iter);
+	if (!nfs_param.core_param.enable_IOSTAGES) {
+		success = false;
+		errormsg = "iostages stats disabled";
+		gsh_dbus_status_reply(&iter, success, errormsg);
+		return true;
+	}
+	gsh_dbus_status_reply(&iter, success, errormsg);
+	server_dbus_io_stages_stats(&iter);
+
+	return true;
+}
+
+static struct gsh_dbus_method io_stages_statistics = {
+	.name = "GetIOStageStats",
+	.method = stats_io_stages,
+	.args = { STATUS_REPLY, TIMESTAMP_REPLY, IO_STAGES_REPLY, MESSAGE_REPLY,
+		  END_ARG_LIST }
+};
+
+/**
  * DBUS method to know current status of stats counting
  */
 static bool stats_status(DBusMessageIter *args, DBusMessage *reply,
@@ -2344,7 +2376,7 @@ static bool stats_status(DBusMessageIter *args, DBusMessage *reply,
 #ifdef _USE_NFS3
 	DBusMessageIter v3_full_status;
 #endif
-	DBusMessageIter v4_full_status, authstatus;
+	DBusMessageIter v4_full_status, authstatus, iostages_status;
 	dbus_bool_t value;
 
 	dbus_message_iter_init_append(reply, &iter);
@@ -2403,6 +2435,15 @@ static bool stats_status(DBusMessageIter *args, DBusMessage *reply,
 	gsh_dbus_append_timestamp(&clnt_allops_status, &clnt_allops_stats_time);
 	dbus_message_iter_close_container(&iter, &clnt_allops_status);
 
+	/* Send info about I/O stage timings */
+	dbus_message_iter_open_container(&iter, DBUS_TYPE_STRUCT, NULL,
+					 &iostages_status);
+	value = nfs_param.core_param.enable_IOSTAGES;
+	dbus_message_iter_append_basic(&iostages_status, DBUS_TYPE_BOOLEAN,
+				       &value);
+	gsh_dbus_append_timestamp(&iostages_status, &io_stages_stats_time);
+	dbus_message_iter_close_container(&iter, &iostages_status);
+
 	return true;
 }
 
@@ -2445,6 +2486,8 @@ static bool stats_disable(DBusMessageIter *args, DBusMessage *reply,
 		nfs_param.core_param.enable_FULLV4STATS = false;
 		nfs_param.core_param.enable_AUTHSTATS = false;
 		nfs_param.core_param.enable_CLNTALLSTATS = false;
+		nfs_param.core_param.enable_IOSTAGES = false;
+		svc_set_stage_timing(false);
 		LogEvent(COMPONENT_CONFIG,
 			 "Disabling NFS server statistics counting");
 		LogEvent(COMPONENT_CONFIG,
@@ -2457,6 +2500,9 @@ static bool stats_disable(DBusMessageIter *args, DBusMessage *reply,
 			 "Disabling auth statistics counting");
 		/* reset auth counters */
 		reset_auth_stats();
+		LogEvent(COMPONENT_CONFIG,
+			 "Disabling I/O stage timing statistics");
+		server_stats_io_stages_reset();
 	}
 	if (strcmp(stat_type, "nfs") == 0) {
 		nfs_param.core_param.enable_NFSSTATS = false;
@@ -2506,6 +2552,13 @@ static bool stats_disable(DBusMessageIter *args, DBusMessage *reply,
 			 "Disabling client all ops statistics counting");
 		/* reset client all ops counters */
 		reset_clnt_allops_stats();
+	}
+	if (strcmp(stat_type, "iostages") == 0) {
+		nfs_param.core_param.enable_IOSTAGES = false;
+		svc_set_stage_timing(false);
+		LogEvent(COMPONENT_CONFIG,
+			 "Disabling I/O stage timing statistics");
+		server_stats_io_stages_reset();
 	}
 
 	gsh_dbus_status_reply(&iter, true, errormsg);
@@ -2586,6 +2639,13 @@ static bool stats_enable(DBusMessageIter *args, DBusMessage *reply,
 				 "Enabling client all ops statistics counting");
 			now(&clnt_allops_stats_time);
 		}
+		if (!nfs_param.core_param.enable_IOSTAGES) {
+			nfs_param.core_param.enable_IOSTAGES = true;
+			svc_set_stage_timing(true);
+			LogEvent(COMPONENT_CONFIG,
+				 "Enabling I/O stage timing statistics");
+			now(&io_stages_stats_time);
+		}
 	}
 	if (strcmp(stat_type, "nfs") == 0 &&
 	    !nfs_param.core_param.enable_NFSSTATS) {
@@ -2644,6 +2704,14 @@ static bool stats_enable(DBusMessageIter *args, DBusMessage *reply,
 		nfs_param.core_param.enable_AUTHSTATS = true;
 		LogEvent(COMPONENT_CONFIG, "Enabling auth statistics counting");
 		now(&auth_stats_time);
+	}
+	if (strcmp(stat_type, "iostages") == 0 &&
+	    !nfs_param.core_param.enable_IOSTAGES) {
+		nfs_param.core_param.enable_IOSTAGES = true;
+		svc_set_stage_timing(true);
+		LogEvent(COMPONENT_CONFIG,
+			 "Enabling I/O stage timing statistics");
+		now(&io_stages_stats_time);
 	}
 
 	gsh_dbus_status_reply(&iter, true, errormsg);
@@ -2925,6 +2993,7 @@ static struct gsh_dbus_method *export_stats_methods[] = {
 	&v3_full_statistics,
 #endif
 	&v4_full_statistics,
+	&io_stages_statistics,
 #ifdef _HAVE_GSSAPI
 	&auth_statistics,
 #endif /* _HAVE_GSSAPI */

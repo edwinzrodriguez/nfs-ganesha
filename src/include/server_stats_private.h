@@ -315,6 +315,9 @@ struct auth_stats {
 		  .direction = "out" },                                \
 		{ .name = "clnt_allops_status",                        \
 		  .type = "b(tt)",                                     \
+		  .direction = "out" },                                \
+		{ .name = "iostages_status",                           \
+		  .type = "b(tt)",                                     \
 		  .direction = "out" }
 #else
 #define STATS_STATUS_REPLY                                             \
@@ -330,6 +333,9 @@ struct auth_stats {
 		  .direction = "out" },                                \
 		{ .name = "clnt_allops_status",                        \
 		  .type = "b(tt)",                                     \
+		  .direction = "out" },                                \
+		{ .name = "iostages_status",                           \
+		  .type = "b(tt)",                                     \
 		  .direction = "out" }
 #endif
 
@@ -342,6 +348,10 @@ struct auth_stats {
 /* name, total, errors, avg, min, max, e2e_avg, send_avg */
 #define V4_FULL_REPLY \
 	{ .name = "v4_full_stats", .type = "a(sttddddd)", .direction = "out" }
+
+/* name, count, avg_us, min_us, max_us — buckets then stage deltas */
+#define IO_STAGES_REPLY \
+	{ .name = "io_stages", .type = "a(stddd)", .direction = "out" }
 
 #define AUTH_REPLY \
 	{ .name = "auth", .type = "a(tdddtdddtddd)", .direction = "out" }
@@ -423,6 +433,7 @@ void mdcache_utilization(DBusMessageIter *iter);
 void server_dbus_v3_full_stats(DBusMessageIter *iter);
 #endif
 void server_dbus_v4_full_stats(DBusMessageIter *iter);
+void server_dbus_io_stages_stats(DBusMessageIter *iter);
 void reset_server_stats(void);
 void reset_export_stats(void);
 void reset_client_stats(void);

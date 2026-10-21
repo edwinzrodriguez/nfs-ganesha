@@ -445,6 +445,8 @@ typedef struct nfs_core_param {
 	bool enable_FASTSTATS;
 	/** Whether to collect FSAL stats.  Defaults to false. */
 	bool enable_FSALSTATS;
+	/** Whether to collect I/O path stage timings.  Defaults to false. */
+	bool enable_IOSTAGES;
 #ifdef _USE_NFS3
 	/** Whether to collect NFSv3 Detailed stats.  Defaults to false. */
 	bool enable_FULLV3STATS;

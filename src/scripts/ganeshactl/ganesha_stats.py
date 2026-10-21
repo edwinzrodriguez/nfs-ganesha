@@ -46,7 +46,7 @@ To display stat counters use:
   {progname} [list_clients | deleg <ip address>
               inode | iov3 [export id] | iov4 [export id] | iov41 [export id] | iov42 [export id] |
               iomon [export id] | export | total [export id] | fast | pnfs [export id] |
-              fsal <fsal name> | v3_full | v4_full | auth |
+              fsal <fsal name> | v3_full | v4_full | iostages | auth |
               client_io_ops <ip address> | export_details <export id> |
               client_all_ops <ip address>]
   fsal name is the registered FSAL module name (e.g. GPFS, Ceph).
@@ -59,7 +59,7 @@ To reset stat counters use:
 
 To enable/disable stat counters use:
   {progname} [enable | disable] [all | nfs | fsal | v3_full |
-                                 v4_full | auth | client_all_ops]
+                                 v4_full | iostages | auth | client_all_ops]
 
 """
     )
@@ -90,8 +90,8 @@ if output_json and command in json_not_available:
 commands = (
     'help', 'list_clients', 'deleg', 'global', 'inode', 'iov3', 'iov4',
     'iov41', 'iov42', 'iomon', 'export', 'total', 'fast', 'pnfs', 'fsal',
-    'reset', 'enable', 'disable', 'status', 'v3_full', 'v4_full', 'auth',
-    'client_io_ops', 'export_details', 'client_all_ops', 'json'
+    'reset', 'enable', 'disable', 'status', 'v3_full', 'v4_full', 'iostages',
+    'auth', 'client_io_ops', 'export_details', 'client_all_ops', 'json'
 )
 
 if command not in commands:
@@ -129,12 +129,13 @@ elif command in ('fsal'):
     command_arg = opts[0]
 elif command in ('enable', 'disable'):
     if not len(opts) == 1:
-        print("\nError: Option '%s' must be followed by all/nfs/fsal/v3_full/v4_full/auth/client_all_ops" %
+        print("\nError: Option '%s' must be followed by all/nfs/fsal/v3_full/v4_full/iostages/auth/client_all_ops" %
             command)
         print_usage_exit(1)
     command_arg = opts[0]
-    if command_arg not in ('all', 'nfs', 'fsal', 'v3_full', 'v4_full', 'auth', 'client_all_ops'):
-        print("\nError: Option '%s' must be followed by all/nfs/fsal/v3_full/v4_full/auth/client_all_ops" %
+    if command_arg not in ('all', 'nfs', 'fsal', 'v3_full', 'v4_full', 'iostages',
+                           'auth', 'client_all_ops'):
+        print("\nError: Option '%s' must be followed by all/nfs/fsal/v3_full/v4_full/iostages/auth/client_all_ops" %
             command)
         print_usage_exit(1)
 elif command == "help":
@@ -186,6 +187,8 @@ try:
         result = exp_interface.v3_full_stats()
     elif command == "v4_full":
         result = exp_interface.v4_full_stats()
+    elif command == "iostages":
+        result = exp_interface.iostages_stats()
     elif command == "auth":
         result = exp_interface.auth_stats()
     elif command == "enable":

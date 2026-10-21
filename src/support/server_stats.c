@@ -1420,13 +1420,17 @@ void server_stats_nfs_done(nfs_request_t *reqdata, int rc, bool dup)
  */
 void server_stats_nfs_reply_done(const struct timespec *stime,
 				 const struct timespec *reply_time, int opcode,
-				 int status)
+				 int status, uint64_t stage_t10_ns)
 {
 	struct timespec current_time;
 	nsecs_elapsed_t e2e_diff;
 	nsecs_elapsed_t send_diff;
 	int proc;
 	bool is_v3;
+
+	/* T11: reply flush complete (survives nfs_request free via ioq cookie) */
+	if (status == 0)
+		server_stats_io_stages_reply_done(stage_t10_ns);
 
 	if (status != 0 || opcode < 0 || stime == NULL || reply_time == NULL)
 		return;
