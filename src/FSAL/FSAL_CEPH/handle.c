@@ -1744,7 +1744,6 @@ struct ceph_fsal_cb_info {
 	void *caller_arg;
 	struct ceph_fd temp_fd;
 	bool async;
-	bool zerocopy;
 	/* FSALSTATS: e2e latency from nonblocking submit to first callback */
 	struct timespec stat_start;
 	bool stat_timing;
@@ -1789,34 +1788,6 @@ void ceph_read2_cb(struct ceph_ll_io_info *cb_info)
 	} else {
 		/* I/O completed. */
 		read_arg->io_amount = cb_info->result;
-#ifdef USE_FSAL_CEPH_FS_ZEROCOPY_IO
-		if (cb_info->zerocopy) {
-			read_arg->iov_count = cb_info->iovcnt;
-			read_arg->iov = cb_info->iov;
-			read_arg->iov_release = cb_info->release;
-			read_arg->release_data = cb_info->release_data;
-			LogFullDebug(
-				COMPONENT_FSAL,
-				"cb_info->release %p cb_info->release_data %p cb_info->iov %p",
-				cb_info->release, cb_info->release_data,
-				cb_info->iov);
-			if (isFullDebug(COMPONENT_FSAL)) {
-				int i;
-				size_t totlen = 0;
-
-				for (i = 0; i < cb_info->iovcnt; i++) {
-					totlen += cb_info->iov[i].iov_len;
-					LogFullDebug(
-						COMPONENT_FSAL,
-						"cb_info->iov %p [%d].iov_base %p iov_len %zu for %zu of %" PRIu64,
-						cb_info->iov, i,
-						cb_info->iov[i].iov_base,
-						cb_info->iov[i].iov_len, totlen,
-						cb_info->result);
-				}
-			}
-		}
-#endif
 		LogFullDebug(COMPONENT_FSAL, "Read returned %" PRIu64,
 			     cb_info->result);
 	}
@@ -1929,7 +1900,7 @@ static void ceph_fsal_read2(struct fsal_obj_handle *obj_hdl, bool bypass,
 
 	/* Indicate a desire to start io and get a usable file descritor */
 #if USE_FSAL_CEPH_FS_NONBLOCKING_IO
-	if (CephFSM.async || CephFSM.zerocopy) {
+	if (CephFSM.async) {
 		status = fsal_start_io(&out_fd, obj_hdl, &myself->fd.fsal_fd,
 				       &cbi->temp_fd.fsal_fd, read_arg->state,
 				       FSAL_O_READ, false, NULL, bypass,
@@ -1956,13 +1927,8 @@ static void ceph_fsal_read2(struct fsal_obj_handle *obj_hdl, bool bypass,
 	read_arg->io_amount = 0;
 
 #if USE_FSAL_CEPH_FS_NONBLOCKING_IO
-#ifdef USE_FSAL_CEPH_FS_ZEROCOPY_IO
-	if (!CephFSM.async && !CephFSM.zerocopy)
-		goto old_style;
-#else
 	if (!CephFSM.async)
 		goto old_style;
-#endif
 
 	cbi->io_info.callback = ceph_read2_cb;
 	cbi->io_info.priv = cbi;
@@ -1979,27 +1945,8 @@ static void ceph_fsal_read2(struct fsal_obj_handle *obj_hdl, bool bypass,
 	cbi->done_cb = done_cb;
 	cbi->caller_arg = caller_arg;
 	cbi->async = CephFSM.async;
-	cbi->zerocopy = false;
 	read_arg->cbi = cbi;
 
-#ifdef USE_FSAL_CEPH_FS_ZEROCOPY_IO
-	/* We are only going to do zero copy if configure AND caller didn't
-	 * supply a buffer, otherwise, we will let ceph copy into the
-	 * provided iovec.
-	 */
-	cbi->io_info.zerocopy = CephFSM.zerocopy &&
-				read_arg->iov[0].iov_base == NULL;
-
-	cbi->zerocopy = cbi->io_info.zerocopy;
-
-	if (!CephFSM.async) {
-		/* Do zerocopy non-async I/O */
-		CEPH_FSAL_TIME_CALL(
-			CEPH_STAT_READ,
-			ceph_ll_readv_writev(export->cmount, &cbi->io_info));
-		return;
-	}
-#endif
 	/* Note that while we are passing an export to the callback, the
 	 * protocol request that drove this I/O can not complete until the
 	 * callback completes, which also means that its op_context with its
