@@ -337,6 +337,12 @@ static struct config_item core_params[] = {
 		       enable_FSALSTATS),
 	CONF_ITEM_BOOL("Enable_IOStages", false, nfs_core_param,
 		       enable_IOSTAGES),
+	CONF_ITEM_BOOL("Enable_Socket_Zerocopy", false, nfs_core_param,
+		       enable_socket_zerocopy),
+	CONF_ITEM_UI32("Socket_Zerocopy_Threshold", 0, UINT32_MAX, 0,
+		       nfs_core_param, socket_zerocopy_threshold),
+	CONF_ITEM_UI32("Socket_Zerocopy_Max_Pending", 0, UINT32_MAX, 0,
+		       nfs_core_param, socket_zerocopy_max_pending),
 #ifdef _USE_NFS3
 	CONF_ITEM_BOOL("Enable_FULLV3_Stats", false, nfs_core_param,
 		       enable_FULLV3STATS),

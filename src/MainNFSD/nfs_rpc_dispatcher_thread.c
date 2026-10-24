@@ -1418,6 +1418,16 @@ void nfs_Init_svc(void)
 	svc_params.free_cb = free_nfs_request;
 	svc_params.reply_done_cb = server_stats_nfs_reply_done;
 	svc_params.stage_timing = nfs_param.core_param.enable_IOSTAGES;
+	svc_params.socket_zerocopy = nfs_param.core_param.enable_socket_zerocopy;
+	svc_params.socket_zerocopy_threshold =
+		nfs_param.core_param.socket_zerocopy_threshold;
+	svc_params.socket_zerocopy_max_pending =
+		nfs_param.core_param.socket_zerocopy_max_pending;
+	LogEvent(COMPONENT_DISPATCH,
+		 "Socket TX zerocopy: enable=%s threshold=%u max_pending=%u",
+		 svc_params.socket_zerocopy ? "true" : "false",
+		 svc_params.socket_zerocopy_threshold,
+		 svc_params.socket_zerocopy_max_pending);
 	svc_params.flags = SVC_INIT_EPOLL; /* use EPOLL event mgmt */
 	svc_params.flags |= SVC_INIT_NOREG_XPRTS; /* don't call xprt_register */
 	svc_params.max_connections = nfs_param.core_param.rpc.max_connections;
