@@ -470,6 +470,20 @@ typedef struct nfs_core_param {
 	bool enable_FSALSTATS;
 	/** Whether to collect I/O path stage timings.  Defaults to false. */
 	bool enable_IOSTAGES;
+	/**
+	 * Enable Linux TCP SO_ZEROCOPY + MSG_ZEROCOPY in ntirpc.
+	 * Completions arrive via the socket error queue (EPOLLERR /
+	 * MSG_ERRQUEUE). Independent of FSAL_CEPH zerocopy (which avoids a
+	 * Ganesha↔libcephfs userspace copy). Defaults to false.
+	 */
+	bool enable_socket_zerocopy;
+	/** Min send size (bytes) for MSG_ZEROCOPY; 0 = ntirpc default 16KiB. */
+	uint32_t socket_zerocopy_threshold;
+	/**
+	 * Cap on outstanding ZC payload bytes per TCP xprt; 0 = ntirpc
+	 * default 64MiB. Over cap falls back to classic sendmsg.
+	 */
+	uint32_t socket_zerocopy_max_pending;
 #ifdef _USE_NFS3
 	/** Whether to collect NFSv3 Detailed stats.  Defaults to false. */
 	bool enable_FULLV3STATS;
