@@ -71,11 +71,29 @@ and buffer-lifetime rules.
   drain (completions free TX space without a reliable EPOLLOUT edge).
 - Teardown: `svc_zc_clear` destroys parked replies on xprt unregister.
 
+## Stats
+
+`ganesha_stats.py socket_zc` (DBus `GetSocketZerocopyStats`) exposes ntirpc
+`zc_stats`:
+
+| Field | Meaning |
+|-------|---------|
+| `sends` | Successful `MSG_ZEROCOPY` sendmsg calls |
+| `completions` | ERRQUEUE ZC completion IDs applied |
+| `copied` | Completions with `SO_EE_CODE_ZEROCOPY_COPIED` |
+| `enobufs` | `ENOBUFS` on ZC send |
+| `fallback` | Fell back to classic send after ZC failure |
+| `threshold` / `max_pending` | Effective ntirpc knobs |
+
+`ganesha_stats.py reset` clears these counters. High `copied/sends` means the
+kernel still copied; pin budget / threshold experiments should watch this ratio.
+
 ## Validation checklist
 
 1. Build with `HAVE_SO_ZEROCOPY=ON` (CMake status line).
 2. Set `Enable_Socket_Zerocopy = true;` (optionally with CEPH `zerocopy = true;`).
 3. Large NFSv4 TCP READ; confirm no crash/UAF under load.
 4. `perf` / folded stacks: expect lower `__memmove` / skbuff copy share on TX vs off.
-5. Connection close under outstanding ZC sends: no hang (zcq cleared on unregister).
-6. Negative: old kernel / `setsockopt` fail → classic send path.
+5. `ganesha_stats.py json socket_zc` — `sends` and `completions` rising under load.
+6. Connection close under outstanding ZC sends: no hang (zcq cleared on unregister).
+7. Negative: old kernel / `setsockopt` fail → classic send path.

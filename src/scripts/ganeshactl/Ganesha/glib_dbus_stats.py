@@ -235,6 +235,11 @@ class RetrieveExportStats():
         stats_state = self.exportmgrobj.get_dbus_method("GetIOStageStats",
                                                         self.dbus_exportstats_name)
         return DumpIOStageStats(stats_state())
+    # Socket MSG_ZEROCOPY counters
+    def socket_zc_stats(self):
+        stats_state = self.exportmgrobj.get_dbus_method(
+            "GetSocketZerocopyStats", self.dbus_exportstats_name)
+        return DumpSocketZerocopyStats(stats_state())
     # authentication
     def auth_stats(self):
         stats_state = self.exportmgrobj.get_dbus_method("GetAuthStats",
@@ -1615,4 +1620,68 @@ class DumpIOStageStats(Report):
             output += " %12.3f" % (stage[2])
             output += " %12.3f" % (stage[3])
             output += " %12.3f" % (stage[4])
+        return output
+
+
+class DumpSocketZerocopyStats(Report):
+    """MSG_ZEROCOPY counters from ntirpc zc_stats via GetSocketZerocopyStats."""
+
+    def __init__(self, status):
+        super().__init__(status)
+        self.curtime = time.time()
+        self.stats = status
+
+    def fill_report(self, report):
+        if not self.result[0]:
+            return
+        zc = self.result[3]
+        report["enabled"] = dbus_to_std(zc[0])
+        report["threshold"] = dbus_to_std(zc[1])
+        report["max_pending"] = dbus_to_std(zc[2])
+        report["sends"] = dbus_to_std(zc[3])
+        report["completions"] = dbus_to_std(zc[4])
+        report["copied"] = dbus_to_std(zc[5])
+        report["enobufs"] = dbus_to_std(zc[6])
+        report["fallback"] = dbus_to_std(zc[7])
+        sends = report["sends"] or 0
+        if sends:
+            report["copied_pct"] = 100.0 * report["copied"] / sends
+            report["fallback_pct"] = 100.0 * report["fallback"] / sends
+        else:
+            report["copied_pct"] = 0.0
+            report["fallback_pct"] = 0.0
+
+    def __str__(self):
+        if not self.stats[0]:
+            return "Unable to fetch socket zerocopy stats - " + str(self.stats[1])
+        if self.stats[4] != "OK":
+            return "\n No socket zerocopy stats available for display"
+        zc = self.stats[3]
+        enabled = bool(zc[0])
+        threshold = int(zc[1])
+        max_pending = int(zc[2])
+        sends = int(zc[3])
+        completions = int(zc[4])
+        copied = int(zc[5])
+        enobufs = int(zc[6])
+        fallback = int(zc[7])
+        starttime = self.stats[2][0] + self.stats[2][1] / 1e9
+        duration = self.curtime - starttime
+        copied_pct = (100.0 * copied / sends) if sends else 0.0
+        fallback_pct = (100.0 * fallback / sends) if sends else 0.0
+        output = "Socket MSG_ZEROCOPY stats (ntirpc zc_stats)\n"
+        output += "Stats collected since: " + time.ctime(self.stats[2][0])
+        output += str(self.stats[2][1]) + " nsecs\n"
+        output += "Duration: " + "%.10f" % duration + " seconds\n"
+        output += "Enabled: %s\n" % ("true" if enabled else "false")
+        output += "Threshold: %u bytes\n" % threshold
+        output += "Max pending: %u bytes\n" % max_pending
+        output += "\n%-14s %12s\n" % ("Counter", "Value")
+        output += "%s\n" % ("=" * 28)
+        output += "%-14s %12u\n" % ("sends", sends)
+        output += "%-14s %12u\n" % ("completions", completions)
+        output += "%-14s %12u (%.1f%% of sends)\n" % ("copied", copied, copied_pct)
+        output += "%-14s %12u\n" % ("enobufs", enobufs)
+        output += "%-14s %12u (%.1f%% of sends)\n" % (
+            "fallback", fallback, fallback_pct)
         return output

@@ -67,6 +67,7 @@
 #include "pnfs_utils.h"
 #include "idmapper.h"
 #include "sal_functions.h"
+#include "gsh_rpc.h"
 
 /** Mutex to serialize export admin operations.
  */
@@ -79,6 +80,7 @@ struct timespec v3_full_stats_time;
 struct timespec v4_full_stats_time;
 struct timespec auth_stats_time;
 struct timespec clnt_allops_stats_time;
+struct timespec socket_zc_stats_time;
 /**
  * @brief Exports are stored in an AVL tree with front-end cache.
  *
@@ -937,7 +939,7 @@ void nfs_init_stats_time(void)
 	now(&nfs_stats_time);
 	fsal_stats_time = v3_full_stats_time = v4_full_stats_time =
 		auth_stats_time = clnt_allops_stats_time = nfs_stats_time;
-	io_stages_stats_time = nfs_stats_time;
+	io_stages_stats_time = socket_zc_stats_time = nfs_stats_time;
 }
 
 #ifdef USE_DBUS
@@ -2260,6 +2262,8 @@ static bool stats_reset(DBusMessageIter *args, DBusMessage *reply,
 	reset_server_stats();
 	reset_auth_stats();
 	server_stats_io_stages_reset();
+	svc_reset_socket_zerocopy_stats();
+	now(&socket_zc_stats_time);
 
 	/* update the stats counting time */
 	nfs_init_stats_time();
@@ -2361,6 +2365,56 @@ static struct gsh_dbus_method io_stages_statistics = {
 	.name = "GetIOStageStats",
 	.method = stats_io_stages,
 	.args = { STATUS_REPLY, TIMESTAMP_REPLY, IO_STAGES_REPLY, MESSAGE_REPLY,
+		  END_ARG_LIST }
+};
+
+/**
+ * DBUS method to get socket MSG_ZEROCOPY counters (ntirpc zc_stats)
+ */
+static bool stats_socket_zerocopy(DBusMessageIter *args, DBusMessage *reply,
+				  DBusError *error)
+{
+	bool success = true;
+	char *errormsg = "OK";
+	char *message = "OK";
+	DBusMessageIter iter, st_iter;
+	struct svc_socket_zerocopy_stats zc;
+	dbus_bool_t enabled;
+	uint64_t threshold, max_pending;
+
+	svc_get_socket_zerocopy_stats(&zc);
+
+	dbus_message_iter_init_append(reply, &iter);
+	gsh_dbus_status_reply(&iter, success, errormsg);
+	gsh_dbus_append_timestamp(&iter, &socket_zc_stats_time);
+
+	enabled = zc.enabled;
+	threshold = zc.threshold;
+	max_pending = zc.max_pending;
+
+	dbus_message_iter_open_container(&iter, DBUS_TYPE_STRUCT, NULL,
+					 &st_iter);
+	dbus_message_iter_append_basic(&st_iter, DBUS_TYPE_BOOLEAN, &enabled);
+	dbus_message_iter_append_basic(&st_iter, DBUS_TYPE_UINT64, &threshold);
+	dbus_message_iter_append_basic(&st_iter, DBUS_TYPE_UINT64,
+				       &max_pending);
+	dbus_message_iter_append_basic(&st_iter, DBUS_TYPE_UINT64, &zc.sends);
+	dbus_message_iter_append_basic(&st_iter, DBUS_TYPE_UINT64,
+				       &zc.completions);
+	dbus_message_iter_append_basic(&st_iter, DBUS_TYPE_UINT64, &zc.copied);
+	dbus_message_iter_append_basic(&st_iter, DBUS_TYPE_UINT64, &zc.enobufs);
+	dbus_message_iter_append_basic(&st_iter, DBUS_TYPE_UINT64,
+				       &zc.fallback);
+	dbus_message_iter_close_container(&iter, &st_iter);
+
+	dbus_message_iter_append_basic(&iter, DBUS_TYPE_STRING, &message);
+	return true;
+}
+
+static struct gsh_dbus_method socket_zerocopy_statistics = {
+	.name = "GetSocketZerocopyStats",
+	.method = stats_socket_zerocopy,
+	.args = { STATUS_REPLY, TIMESTAMP_REPLY, SOCKET_ZC_REPLY, MESSAGE_REPLY,
 		  END_ARG_LIST }
 };
 
@@ -2994,6 +3048,7 @@ static struct gsh_dbus_method *export_stats_methods[] = {
 #endif
 	&v4_full_statistics,
 	&io_stages_statistics,
+	&socket_zerocopy_statistics,
 #ifdef _HAVE_GSSAPI
 	&auth_statistics,
 #endif /* _HAVE_GSSAPI */

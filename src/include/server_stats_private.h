@@ -353,6 +353,10 @@ struct auth_stats {
 #define IO_STAGES_REPLY \
 	{ .name = "io_stages", .type = "a(stddd)", .direction = "out" }
 
+/* enabled, threshold, max_pending, sends, completions, copied, enobufs, fallback */
+#define SOCKET_ZC_REPLY \
+	{ .name = "socket_zc", .type = "(bttttttt)", .direction = "out" }
+
 #define AUTH_REPLY \
 	{ .name = "auth", .type = "a(tdddtdddtddd)", .direction = "out" }
 
