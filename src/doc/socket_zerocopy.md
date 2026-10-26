@@ -55,12 +55,13 @@ and buffer-lifetime rules.
   released for the syscall) so ERRQUEUE drain cannot miss the id — without
   holding `writeq.qmutex` across `sendmsg`, which stalled drains and hung.
 - Completions: `svc_zc_drain` empties ERRQUEUE from EPOLLERR and opportunistic
-  post-send drains. EPOLLERR-only still consumes `EPOLLONESHOT`; clear
-  `ADDED_RECV` and rearm so the xprt does not stall after the first ZC
-  completion. Unmatched IDs are kept briefly as orphans and applied when the
-  matching ioq appears. `XDR_DESTROY` runs only *after* releasing
-  `writeq.qmutex` — destroying FSAL_CEPH gifted buffers under that lock
-  deadlocks with threads that hold CEPH locks then wait to queue a reply.
+  post-send drains. EPOLLERR-only still consumes `EPOLLONESHOT` on the fd that
+  fired (`xp_fd` RECV vs dup `xp_fd_send`); rearm **only that** direction
+  (SEND bit in epoll user-data). Clearing the sibling arm drops a still-live
+  oneshot and hangs under remote ZC. `write_resume` after ERR must not run
+  when a SEND task owns `xioq_send` (UAF / NULL `ioq_wpe.fun`), but *must* run
+  whenever ERR did not hand off a SEND task. Unmatched IDs are kept briefly as
+  orphans. `XDR_DESTROY` runs only *after* releasing `writeq.qmutex`.
 - Use a dedicated `zc_s` list node — never `ioq_s` (still on `writeq` during
   send).
 - The RPC record-mark header must live in `xioq->frag_hdr_be` for ZC sends —
