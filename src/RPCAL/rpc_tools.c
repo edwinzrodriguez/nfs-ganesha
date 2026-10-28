@@ -56,6 +56,9 @@
 #include "nfs_exports.h"
 #include "nfs_file_handle.h"
 #include "nfs_dupreq.h"
+#include <rpc/xdr_ioq.h>
+
+nfs_write_payload_setup_t nfs_write_payload_setup;
 
 /* XXX doesn't ntirpc have an equivalent for all of the following?
  */
@@ -321,6 +324,45 @@ static inline bool xdr_io_data_decode(XDR *xdrs, io_data *objp)
 
 	/* For rdma_reads data received separately, so get data buffer */
 	start = XDR_GETSTARTDATAPOS(xdrs, start, objp->data_len);
+
+	/*
+	 * Phase 2 upper-layer WRITE: FSAL-registered payload_alloc fills
+	 * Ceph (or other) pages via xdr_ioq_fill_payload. Fall back to
+	 * FILLBUFS / donate-claim if unset or fill fails.
+	 */
+	if (xdr_ioq_has_payload_alloc(xdrs)) {
+		struct iovec *iov = NULL;
+		int iovcnt = 0;
+		void *cookie = NULL;
+		void (*release)(void *) = NULL;
+
+		if (xdr_ioq_fill_payload(xdrs, start, objp->data_len, &iov,
+					 &iovcnt, &cookie, &release)) {
+			objp->iov = iov;
+			objp->iovcnt = (u_int)iovcnt;
+			objp->release = release;
+			objp->release_data = cookie;
+
+			if (!XDR_SETPOS(xdrs,
+					XDR_GETENDDATAPOS(
+						xdrs, start,
+						RNDUP(objp->data_len)))) {
+				if (release != NULL)
+					release(cookie);
+				objp->iov = NULL;
+				objp->release = NULL;
+				objp->release_data = NULL;
+				return false;
+			}
+
+			LogFullDebug(COMPONENT_DISPATCH,
+				     "fill_payload iovcnt=%d data_len=%u cookie=%p",
+				     iovcnt, objp->data_len, cookie);
+			return true;
+		}
+		LogFullDebug(COMPONENT_DISPATCH,
+			     "fill_payload failed; falling back to FILLBUFS");
+	}
 
 	/* Find out how many buffers the data occupies */
 	objp->iovcnt = XDR_IOVCOUNT(xdrs, start, objp->data_len);

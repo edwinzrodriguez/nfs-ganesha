@@ -574,6 +574,11 @@ enum nfs_req_result nfs4_op_write(struct nfs_argop4 *op, compound_data_t *data,
 	write_arg->io_request = size;
 	write_arg->iov_count = arg_WRITE4->data.iovcnt;
 	write_arg->iov = arg_WRITE4->data.iov;
+	/* Transfer upper-layer alloc cookie (fill_payload) if present. */
+	write_arg->iov_release = arg_WRITE4->data.release;
+	write_arg->release_data = arg_WRITE4->data.release_data;
+	arg_WRITE4->data.release = NULL;
+	arg_WRITE4->data.release_data = NULL;
 	write_arg->io_amount = 0;
 	write_arg->fsal_stable = arg_WRITE4->stable != UNSTABLE4 || force_sync;
 

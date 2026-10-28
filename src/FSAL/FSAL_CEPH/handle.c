@@ -42,8 +42,12 @@
 #include <cephfs/libcephfs.h>
 #ifdef USE_FSAL_CEPH_FS_ZEROCOPY_IO
 #include <cephfs/ceph_buffer.h>
-#ifdef USE_FSAL_CEPH_FS_CLAIM_IO
+#if defined(USE_FSAL_CEPH_FS_CLAIM_IO) || defined(USE_FSAL_CEPH_FS_ALLOC_IO)
 #include <rpc/xdr_ioq.h>
+#include <rpc/svc.h>
+#endif
+#ifdef USE_FSAL_CEPH_FS_ALLOC_IO
+#include "gsh_rpc.h"
 #endif
 #endif
 #include "fsal.h"
@@ -1787,6 +1791,68 @@ static void ceph_zc_iov_release(void *release_data)
 	gsh_free(rel);
 }
 
+#ifdef USE_FSAL_CEPH_FS_ALLOC_IO
+void ceph_write_bl_release(void *cookie)
+{
+	if (cookie != NULL)
+		ceph_bufferlist_put(cookie);
+}
+
+static bool ceph_xdr_payload_alloc(void *ctx, u_int data_len,
+				   struct iovec **iov_out, int *iovcnt_out,
+				   void **cookie_out,
+				   void (**release_out)(void *cookie))
+{
+	ceph_bufferlist *bl;
+	struct iovec *iov;
+	int n;
+	size_t cap = 0;
+	int i;
+
+	(void)ctx;
+	if (data_len == 0 || iov_out == NULL || iovcnt_out == NULL ||
+	    cookie_out == NULL || release_out == NULL)
+		return false;
+
+	bl = ceph_bufferlist_alloc(data_len);
+	if (bl == NULL)
+		return false;
+
+	iov = gsh_calloc(IOV_MAX, sizeof(*iov));
+	n = ceph_bufferlist_to_iovec(bl, iov, IOV_MAX);
+	if (n <= 0) {
+		ceph_bufferlist_put(bl);
+		gsh_free(iov);
+		return false;
+	}
+
+	for (i = 0; i < n; i++)
+		cap += iov[i].iov_len;
+	if (cap < data_len) {
+		ceph_bufferlist_put(bl);
+		gsh_free(iov);
+		return false;
+	}
+
+	*iov_out = iov;
+	*iovcnt_out = n;
+	*cookie_out = bl;
+	*release_out = ceph_write_bl_release;
+	return true;
+}
+
+void ceph_write_payload_setup(XDR *xdrs, SVCXPRT *xprt)
+{
+	if (!CephFSM.zerocopy ||
+	    !CephFSM.fsal.fs_info.allocate_own_write_buffer)
+		return;
+
+	xdr_ioq_set_payload_alloc(xdrs, ceph_xdr_payload_alloc, NULL);
+	if (xprt != NULL)
+		svc_vc_set_payload_defer(xprt, true, 0);
+}
+#endif /* USE_FSAL_CEPH_FS_ALLOC_IO */
+
 /**
  * @brief Complete a zero-copy read after Ceph callback or CLOSEFD resume
  *
@@ -2554,47 +2620,64 @@ static void ceph_fsal_write2(struct fsal_obj_handle *obj_hdl, bool bypass,
 #if USE_FSAL_CEPH_FS_NONBLOCKING_IO
 #ifdef USE_FSAL_CEPH_FS_ZEROCOPY_IO
 	if (CephFSM.zerocopy) {
-		ceph_bufferlist *bl;
-#ifdef USE_FSAL_CEPH_FS_CLAIM_IO
-		struct xdr_donate_cookie *donate = NULL;
-		XDR *xdrs = NULL;
-
+		ceph_bufferlist *bl = NULL;
+#ifdef USE_FSAL_CEPH_FS_ALLOC_IO
 		/*
-		 * Phase 3: donate recv UV payloads then claim_iov so XDR_DESTROY
-		 * will not free them. Deleter returns the UV allocation base
-		 * (not mid-slice iov_base) when Ceph drops the last raw —
-		 * required before ObjectCacher can hold WRITE bytes past the
-		 * write CB (Phase 2). Falls back to wrap_iov if donate cannot
-		 * map every iov (e.g. copy-decode path).
+		 * Phase 2: payload already in Ceph-owned pages from
+		 * fill_payload. Cookie is the bufferlist; clear release so
+		 * XDR_FREE / iov_release will not put after async_write
+		 * consumes it.
 		 */
-		if (op_ctx != NULL && op_ctx->nfs_reqdata != NULL)
-			xdrs = op_ctx->nfs_reqdata->svc.rq_xdrs;
-		if (xdrs != NULL)
-			donate = xdr_ioq_donate_iovs(xdrs, write_arg->iov,
-						     write_arg->iov_count);
-		if (donate != NULL) {
-			bl = ceph_bufferlist_claim_iov(write_arg->iov,
-						       write_arg->iov_count,
-						       xdr_ioq_donate_deleter,
-						       donate);
-			if (bl == NULL) {
-				xdr_ioq_donate_cancel(donate);
-				donate = NULL;
-				status = ceph2fsal_error(-ENOMEM);
-				goto out;
-			}
+		if (write_arg->release_data != NULL &&
+		    write_arg->iov_release == ceph_write_bl_release) {
+			bl = write_arg->release_data;
+			write_arg->release_data = NULL;
+			write_arg->iov_release = NULL;
 			LogFullDebug(COMPONENT_FSAL,
-				     "ZC write claim_iov donated %d iov(s) "
+				     "ZC write upper-layer alloc %d iov(s) "
 				     "fileid=%" PRIu64,
 				     write_arg->iov_count, obj_hdl->fileid);
-		} else {
+		}
+#endif
+		if (bl == NULL) {
+#ifdef USE_FSAL_CEPH_FS_CLAIM_IO
+			struct xdr_donate_cookie *donate = NULL;
+			XDR *xdrs = NULL;
+
+			/*
+			 * Fallback: donate recv UV payloads then claim_iov so
+			 * XDR_DESTROY will not free them. Deleter returns the
+			 * UV allocation base (not mid-slice iov_base).
+			 */
+			if (op_ctx != NULL && op_ctx->nfs_reqdata != NULL)
+				xdrs = op_ctx->nfs_reqdata->svc.rq_xdrs;
+			if (xdrs != NULL)
+				donate = xdr_ioq_donate_iovs(
+					xdrs, write_arg->iov,
+					write_arg->iov_count);
+			if (donate != NULL) {
+				bl = ceph_bufferlist_claim_iov(
+					write_arg->iov, write_arg->iov_count,
+					xdr_ioq_donate_deleter, donate);
+				if (bl == NULL) {
+					xdr_ioq_donate_cancel(donate);
+					status = ceph2fsal_error(-ENOMEM);
+					goto out;
+				}
+				LogFullDebug(COMPONENT_FSAL,
+					     "ZC write claim_iov donated %d "
+					     "iov(s) fileid=%" PRIu64,
+					     write_arg->iov_count,
+					     obj_hdl->fileid);
+			} else {
+				bl = ceph_bufferlist_wrap_iov(
+					write_arg->iov, write_arg->iov_count);
+			}
+#else /* !USE_FSAL_CEPH_FS_CLAIM_IO */
 			bl = ceph_bufferlist_wrap_iov(write_arg->iov,
 						      write_arg->iov_count);
-		}
-#else /* !USE_FSAL_CEPH_FS_CLAIM_IO */
-		bl = ceph_bufferlist_wrap_iov(write_arg->iov,
-					      write_arg->iov_count);
 #endif /* USE_FSAL_CEPH_FS_CLAIM_IO */
+		}
 		if (bl == NULL) {
 			status = ceph2fsal_error(-ENOMEM);
 			goto out;
