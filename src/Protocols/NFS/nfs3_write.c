@@ -361,6 +361,11 @@ int nfs3_write(nfs_arg_t *arg, struct svc_req *req, nfs_res_t *res)
 				 force_sync;
 	write_arg->iov_count = arg->arg_write3.data.iovcnt;
 	write_arg->iov = arg->arg_write3.data.iov;
+	/* Transfer upper-layer alloc cookie (fill_payload) if present. */
+	write_arg->iov_release = arg->arg_write3.data.release;
+	write_arg->release_data = arg->arg_write3.data.release_data;
+	arg->arg_write3.data.release = NULL;
+	arg->arg_write3.data.release_data = NULL;
 	write_arg->io_amount = 0;
 
 	write_data->res = res;

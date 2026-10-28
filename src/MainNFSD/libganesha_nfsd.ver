@@ -227,6 +227,7 @@
   nfs_start;
   nfs_start_grace;
   nfs_wait_for_grace_enforcement;
+  nfs_write_payload_setup;
   nfsop4_to_str;
   nfsproc3_to_str;
   nfsstat3_to_str;

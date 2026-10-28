@@ -107,6 +107,11 @@ struct ceph_fsal_module
 #else
 				    .allocate_own_read_buffer = false,
 #endif
+#ifdef USE_FSAL_CEPH_FS_ALLOC_IO
+				    .allocate_own_write_buffer = true,
+#else
+				    .allocate_own_write_buffer = false,
+#endif
 				    .expire_time_parent = -1,
 				    .readdir_mode = FSAL_RDDIR_CHUNK_NEVER,
 			    } } };
@@ -269,10 +274,10 @@ static int ceph_conf_commit(void *node, void *link_mem, void *self_struct,
 
 	if (CephFSM->client_oc && CephFSM->zerocopy) {
 		/*
-		 * WRITE donate/claim (Phase 3) is implemented so ObjectCacher
-		 * can own donated recv pages, but ZeroCopyClient still bypasses
-		 * ObjectCacher (Phase 2). Keep the combo rejected until OC is
-		 * wired into the ZC write path.
+		 * Upper-layer WRITE alloc (Phase 2) and donate/claim give Ceph
+		 * owned pages, but ZeroCopyClient still bypasses ObjectCacher
+		 * for async I/O. Keep the combo rejected until OC is wired
+		 * into the ZC path.
 		 */
 		LogWarn(COMPONENT_FSAL,
 			"client_oc and zerocopy are incompatible (ZC bypasses ObjectCacher)");
@@ -1581,6 +1586,11 @@ MODULE_INIT void init(void)
 
 	/* Initialize the fsal_obj_handle ops for FSAL CEPH */
 	handle_ops_init(&CephFSM.handle_ops);
+
+#ifdef USE_FSAL_CEPH_FS_ALLOC_IO
+	/* Enable upper-layer WRITE alloc on decode when ZC+ALLOC_IO built. */
+	nfs_write_payload_setup = ceph_write_payload_setup;
+#endif
 }
 
 /**
@@ -1594,6 +1604,10 @@ MODULE_INIT void init(void)
 MODULE_FINI void finish(void)
 {
 	LogDebug(COMPONENT_FSAL, "Ceph module finishing.");
+
+#ifdef USE_FSAL_CEPH_FS_ALLOC_IO
+	nfs_write_payload_setup = NULL;
+#endif
 
 	if (unregister_fsal(&CephFSM.fsal) != 0) {
 		LogCrit(COMPONENT_FSAL,

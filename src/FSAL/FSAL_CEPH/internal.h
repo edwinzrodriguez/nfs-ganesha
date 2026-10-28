@@ -108,6 +108,14 @@ struct ceph_fsal_module {
 };
 extern struct ceph_fsal_module CephFSM;
 
+#ifdef USE_FSAL_CEPH_FS_ALLOC_IO
+#include "gsh_rpc.h"
+/** Register XDR payload_alloc + VC defer for upper-layer WRITE (Phase 2). */
+void ceph_write_payload_setup(XDR *xdrs, SVCXPRT *xprt);
+/** Release cookie from fill_payload when write2 did not consume the bl. */
+void ceph_write_bl_release(void *cookie);
+#endif
+
 struct ceph_mount {
 	/** Node to put this in an avl tree.
 	 *  Indexed by cm_user_id and cm_secret_key.

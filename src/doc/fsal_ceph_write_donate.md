@@ -1,5 +1,11 @@
-# FSAL_CEPH WRITE donate / claim (Phase 3)
+# FSAL_CEPH WRITE donate / claim (fallback)
 
+Prefer upper-layer alloc when available (`USE_FSAL_CEPH_FS_ALLOC_IO`, see
+[`upper_layer_write_alloc.md`](upper_layer_write_alloc.md)): Ceph pages are
+allocated before recv, so `write2` consumes an owned `bufferlist` with no
+donate/claim.
+
+Donate/claim remains the fallback when fill_payload is unset or fails.
 ObjectCacher needs to own WRITE payload bytes past the NFS write callback.
 Non-owning `ceph_bufferlist_wrap_iov` / `create_static` cannot do that: recv UV
 buffers are freed in `XDR_DESTROY` when the compound resumes after the CB.

@@ -113,6 +113,8 @@ bool fsal_supports(struct fsal_staticfsinfo_t *info,
 		return !!info->xattr_support;
 	case fso_allocate_own_read_buffer:
 		return !!info->allocate_own_read_buffer;
+	case fso_allocate_own_write_buffer:
+		return !!info->allocate_own_write_buffer;
 	case fso_preserve_unlinked:
 		return !!info->preserve_unlinked;
 	default:
