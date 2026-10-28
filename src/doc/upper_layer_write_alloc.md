@@ -43,8 +43,23 @@ fallback when alloc is unset or fill fails.
 
 Donate/claim remains the fallback when fill_payload is unset or fails.
 
+## Ceph `unique_leakable_ptr` (not for Ganesha)
+
+Ceph’s `ceph::unique_leakable_ptr<buffer::raw>` is an internal C++ move-only
+tag used when constructors such as `create_page_aligned` / `claim_buffer`
+hand a `raw*` into `buffer::ptr` / `bufferlist::push_back`. It uses a nop
+deleter: it does **not** free on destruction and will leak if never adopted.
+`ZeroCopyClient::alloc_buffers` / `claim_iov` already consume those APIs
+behind the C ABI.
+
+Ganesha must not depend on it. Stay on
+`ceph_bufferlist_{alloc,claim_iov,to_iovec,put}`. The type does not replace
+ntirpc `UIO_FLAG_*`, fill_payload cookies, or donate deleters, and exposing
+it would break the opaque C contract without fewer release paths.
+
 ## Non-goals (later)
 
 - Multi-fragment defer beyond a single large LAST_FRAG
 - RDMA upper alloc
 - Lift `client_oc && zerocopy` reject (needs ZeroCopyClient→OC routing)
+- Adopt Ceph `unique_leakable_ptr` in Ganesha (see above)
