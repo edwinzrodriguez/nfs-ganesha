@@ -42,6 +42,9 @@
 #include <cephfs/libcephfs.h>
 #ifdef USE_FSAL_CEPH_FS_ZEROCOPY_IO
 #include <cephfs/ceph_buffer.h>
+#ifdef USE_FSAL_CEPH_FS_CLAIM_IO
+#include <rpc/xdr_ioq.h>
+#endif
 #endif
 #include "fsal.h"
 #include "fsal_types.h"
@@ -2552,9 +2555,46 @@ static void ceph_fsal_write2(struct fsal_obj_handle *obj_hdl, bool bypass,
 #ifdef USE_FSAL_CEPH_FS_ZEROCOPY_IO
 	if (CephFSM.zerocopy) {
 		ceph_bufferlist *bl;
+#ifdef USE_FSAL_CEPH_FS_CLAIM_IO
+		struct xdr_donate_cookie *donate = NULL;
+		XDR *xdrs = NULL;
 
+		/*
+		 * Phase 3: donate recv UV payloads then claim_iov so XDR_DESTROY
+		 * will not free them. Deleter returns the UV allocation base
+		 * (not mid-slice iov_base) when Ceph drops the last raw —
+		 * required before ObjectCacher can hold WRITE bytes past the
+		 * write CB (Phase 2). Falls back to wrap_iov if donate cannot
+		 * map every iov (e.g. copy-decode path).
+		 */
+		if (op_ctx != NULL && op_ctx->nfs_reqdata != NULL)
+			xdrs = op_ctx->nfs_reqdata->svc.rq_xdrs;
+		if (xdrs != NULL)
+			donate = xdr_ioq_donate_iovs(xdrs, write_arg->iov,
+						     write_arg->iov_count);
+		if (donate != NULL) {
+			bl = ceph_bufferlist_claim_iov(write_arg->iov,
+						       write_arg->iov_count,
+						       xdr_ioq_donate_deleter,
+						       donate);
+			if (bl == NULL) {
+				xdr_ioq_donate_cancel(donate);
+				donate = NULL;
+				status = ceph2fsal_error(-ENOMEM);
+				goto out;
+			}
+			LogFullDebug(COMPONENT_FSAL,
+				     "ZC write claim_iov donated %d iov(s) "
+				     "fileid=%" PRIu64,
+				     write_arg->iov_count, obj_hdl->fileid);
+		} else {
+			bl = ceph_bufferlist_wrap_iov(write_arg->iov,
+						      write_arg->iov_count);
+		}
+#else /* !USE_FSAL_CEPH_FS_CLAIM_IO */
 		bl = ceph_bufferlist_wrap_iov(write_arg->iov,
 					      write_arg->iov_count);
+#endif /* USE_FSAL_CEPH_FS_CLAIM_IO */
 		if (bl == NULL) {
 			status = ceph2fsal_error(-ENOMEM);
 			goto out;
@@ -2581,11 +2621,22 @@ static void ceph_fsal_write2(struct fsal_obj_handle *obj_hdl, bool bypass,
 		ceph_fsal_stat_start(&cbi->stat_start, &cbi->stat_timing);
 		/*
 		 * ceph_ll_async_write consumes bl on entry (even if submit
-		 * returns an error). Do not put after this call.
+		 * returns an error). Do not put after this call. On claim path
+		 * that also means do not donate_cancel — Ceph will run the
+		 * deleter when it destroys the consumed bl.
 		 */
-		result = ceph_ll_async_write(export->cmount, my_fd->fd, offset,
-					     bl, write_arg->fsal_stable,
-					     &cbi->zc_comp);
+		{
+			int zc_flags = 0;
+
+			if (write_arg->fsal_stable) {
+				zc_flags |= CEPH_LL_WRITE_FSYNC;
+				if (CephFSM.syncdataonly)
+					zc_flags |= CEPH_LL_WRITE_SYNCDATAONLY;
+			}
+			result = ceph_ll_async_write(export->cmount, my_fd->fd,
+						     offset, bl, zc_flags,
+						     &cbi->zc_comp);
+		}
 
 		if (result < 0) {
 			status = ceph2fsal_error(result);
