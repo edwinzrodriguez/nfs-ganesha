@@ -6,6 +6,9 @@ allocated before recv, so `write2` consumes an owned `bufferlist` with no
 donate/claim.
 
 Donate/claim remains the fallback when fill_payload is unset or fails.
+Do not reach for Ceph `unique_leakable_ptr<raw>` here — it is C++-internal
+transfer typing only (see
+[`upper_layer_write_alloc.md`](upper_layer_write_alloc.md#ceph-unique_leakable_ptr-not-for-ganesha)).
 ObjectCacher needs to own WRITE payload bytes past the NFS write callback.
 Non-owning `ceph_bufferlist_wrap_iov` / `create_static` cannot do that: recv UV
 buffers are freed in `XDR_DESTROY` when the compound resumes after the CB.
