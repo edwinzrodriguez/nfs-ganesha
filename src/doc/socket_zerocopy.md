@@ -27,7 +27,10 @@ are deferred until ERRQUEUE completion.
 | `NFS_Core_Param { Enable_Socket_Zerocopy = true; }` | Kernel TX | Copy into TCP skbuffs on send |
 
 Use both for end-to-end userspace→wire savings on large NFS READ replies. Socket
-TX may still copy (`SO_EE_CODE_ZEROCOPY_COPIED`) depending on NIC/path.
+TX may still copy (`SO_EE_CODE_ZEROCOPY_COPIED`) depending on NIC/path — notably
+**always** on TCP/UDP loopback (kernel deferred copy). That completion is a
+sticky signal for the socket: ntirpc clears `SVC_XPRT_FLAG_SO_ZEROCOPY` on the
+xprt so later sends use classic `sendmsg` (still drains in-flight ERRQUEUE).
 
 ## Ganesha config (`NFS_Core_Param`)
 
@@ -54,6 +57,8 @@ and buffer-lifetime rules.
   The predicted kernel send ID is installed on `zcq` *before* `sendmsg` (lock
   released for the syscall) so ERRQUEUE drain cannot miss the id — without
   holding `writeq.qmutex` across `sendmsg`, which stalled drains and hung.
+  After any `SO_EE_CODE_ZEROCOPY_COPIED` completion, that xprt stops requesting
+  `MSG_ZEROCOPY` (kernel guidance for loopback / non-SG paths).
 - Completions: `svc_zc_drain` empties ERRQUEUE from EPOLLERR and opportunistic
   post-send drains. EPOLLERR-only still consumes `EPOLLONESHOT` on the fd that
   fired (`xp_fd` RECV vs dup `xp_fd_send`); rearm **only that** direction
@@ -86,8 +91,10 @@ and buffer-lifetime rules.
 | `fallback` | Fell back to classic send after ZC failure |
 | `threshold` / `max_pending` | Effective ntirpc knobs |
 
-`ganesha_stats.py reset` clears these counters. High `copied/sends` means the
-kernel still copied; pin budget / threshold experiments should watch this ratio.
+`ganesha_stats.py reset` clears these counters. Rising `copied` with flat later
+`sends` on a connection usually means loopback (or a path that always copies)
+and that xprt has disabled further `MSG_ZEROCOPY`. Ongoing `copied/sends` on
+remote clients warrants NIC / pin-budget investigation.
 
 ## Validation checklist
 
