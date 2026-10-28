@@ -268,8 +268,14 @@ static int ceph_conf_commit(void *node, void *link_mem, void *self_struct,
 	struct ceph_fsal_module *CephFSM = self_struct;
 
 	if (CephFSM->client_oc && CephFSM->zerocopy) {
+		/*
+		 * WRITE donate/claim (Phase 3) is implemented so ObjectCacher
+		 * can own donated recv pages, but ZeroCopyClient still bypasses
+		 * ObjectCacher (Phase 2). Keep the combo rejected until OC is
+		 * wired into the ZC write path.
+		 */
 		LogWarn(COMPONENT_FSAL,
-			"client_oc and zerocopy are incompatible");
+			"client_oc and zerocopy are incompatible (ZC bypasses ObjectCacher)");
 		err_type->invalid = true;
 		return 1;
 	}
