@@ -90,3 +90,4 @@ src/compile_commands.json
 gsh_lttng_generation_rules.cmake
 gsh_lttng_generation_file_properties.cmake
 gsh_generated_include
+**/.idea
