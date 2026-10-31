@@ -2671,14 +2671,28 @@ static void ceph_fsal_write2(struct fsal_obj_handle *obj_hdl, bool bypass,
 		}
 #endif
 		if (bl == NULL) {
+			/*
+			 * With client_oc, ZeroCopyClient only dirties
+			 * Allocated (upper-layer) bls when unencrypted.
+			 * claim/wrap are Filer-only — do not fall back.
+			 */
+			if (CephFSM.client_oc) {
+				LogWarn(COMPONENT_FSAL,
+					"ZC write with client_oc requires "
+					"upper-layer alloc cookie "
+					"fileid=%" PRIu64,
+					obj_hdl->fileid);
+				status = ceph2fsal_error(-EINVAL);
+				goto out;
+			}
 #ifdef USE_FSAL_CEPH_FS_CLAIM_IO
 			struct xdr_donate_cookie *donate = NULL;
 			XDR *xdrs = NULL;
 
 			/*
-			 * Fallback: donate recv UV payloads then claim_iov so
-			 * XDR_DESTROY will not free them. Deleter returns the
-			 * UV allocation base (not mid-slice iov_base).
+			 * Filer-only fallback: donate recv UV payloads then
+			 * claim_iov so XDR_DESTROY will not free them. Deleter
+			 * frees the UV allocation base (not mid-slice iov_base).
 			 */
 			if (op_ctx != NULL && op_ctx->nfs_reqdata != NULL)
 				xdrs = op_ctx->nfs_reqdata->svc.rq_xdrs;

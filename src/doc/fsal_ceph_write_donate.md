@@ -37,9 +37,11 @@ deleter must never `free(iov_base)`; it maps each claimed slice to the UV
 
 ## Config
 
-`client_oc` + `zerocopy` remains rejected until Phase 2 routes ZeroCopyClient
-writes through ObjectCacher. Donate/claim is already exercised on the
-Objecter-only ZC write path when claim_iov is available.
+`client_oc` + `zerocopy` is allowed when upper-layer WRITE alloc is built
+(`USE_FSAL_CEPH_FS_ALLOC_IO`). With `client_oc`, WRITE must carry an Allocated
+cookie from fill_payload; donate/claim and wrap are Filer-only and rejected
+on that path. Donate/claim remains the fallback for Objecter-only ZC
+(`zerocopy` without `client_oc`) when claim_iov is available.
 
 ## Failure / cancel
 

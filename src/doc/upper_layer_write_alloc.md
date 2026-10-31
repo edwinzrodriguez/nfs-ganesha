@@ -57,9 +57,16 @@ Ganesha must not depend on it. Stay on
 ntirpc `UIO_FLAG_*`, fill_payload cookies, or donate deleters, and exposing
 it would break the opaque C contract without fewer release paths.
 
+## ObjectCacher (`client_oc` + `zerocopy`)
+
+When both are enabled, ZeroCopyClient may dirty ObjectCacher with Allocated
+(upper-layer) plaintext, or with ciphertext after FSCrypt encrypt. Ganesha
+requires fill_payload / `ceph_bufferlist_alloc` on the typical WRITE path;
+claim/wrap are not used when `client_oc` is on. Config refuses the combo if
+this build lacks `USE_FSAL_CEPH_FS_ALLOC_IO`.
+
 ## Non-goals (later)
 
 - Multi-fragment defer beyond a single large LAST_FRAG
 - RDMA upper alloc
-- Lift `client_oc && zerocopy` reject (needs ZeroCopyClient→OC routing)
 - Adopt Ceph `unique_leakable_ptr` in Ganesha (see above)

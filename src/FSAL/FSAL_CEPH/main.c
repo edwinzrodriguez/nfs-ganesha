@@ -274,15 +274,26 @@ static int ceph_conf_commit(void *node, void *link_mem, void *self_struct,
 
 	if (CephFSM->client_oc && CephFSM->zerocopy) {
 		/*
-		 * Upper-layer WRITE alloc (Phase 2) and donate/claim give Ceph
-		 * owned pages, but ZeroCopyClient still bypasses ObjectCacher
-		 * for async I/O. Keep the combo rejected until OC is wired
-		 * into the ZC path.
+		 * ZeroCopyClient routes through ObjectCacher when client_oc is on.
+		 * Unencrypted OC dirty requires Allocated (upper-layer)
+		 * bufferlists — claim/wrap stay Filer-only. Refuse the combo
+		 * when this build lacks ceph_bufferlist_alloc / WRITE alloc.
 		 */
+#ifndef USE_FSAL_CEPH_FS_ALLOC_IO
 		LogWarn(COMPONENT_FSAL,
-			"client_oc and zerocopy are incompatible (ZC bypasses ObjectCacher)");
+			"client_oc and zerocopy require libcephfs upper-layer "
+			"WRITE alloc (ceph_bufferlist_alloc)");
 		err_type->invalid = true;
 		return 1;
+#else
+		if (!CephFSM->fsal.fs_info.allocate_own_write_buffer) {
+			LogWarn(COMPONENT_FSAL,
+				"client_oc and zerocopy require "
+				"allocate_own_write_buffer");
+			err_type->invalid = true;
+			return 1;
+		}
+#endif
 	}
 	if (CephFSM->clnts_per_pool == 0) {
 		LogWarn(COMPONENT_FSAL,
