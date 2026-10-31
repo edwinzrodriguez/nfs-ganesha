@@ -51,6 +51,7 @@
 #ifdef USE_MONITORING
 #include "ip_utils.h"
 #include "prometheus_exposer.h"
+#include "nfs_metrics.h"
 #endif /* USE_MONITORING */
 
 #ifdef LINUX
@@ -604,6 +605,11 @@ int main(int argc, char *argv[])
 	if (nfs_param.core_param.enable_metrics) {
 		if (nfs_param.core_param.enable_dynamic_metrics)
 			dynamic_metrics__init();
+		/*
+		 * Register uptime before the exposer accepts scrapes; the
+		 * server thread Sets this gauge after every request.
+		 */
+		register_ganesha_uptime_metric();
 		/* if monitoring_addr is not set, then make use of bind_addr */
 		if (is_inaddrany(&nfs_param.core_param.monitoring_addr)) {
 			LogEvent(COMPONENT_MAIN,

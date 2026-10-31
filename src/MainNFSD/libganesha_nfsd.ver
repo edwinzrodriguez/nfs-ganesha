@@ -261,6 +261,7 @@
   register_config;
   register_config_locked;
   register_fsal;
+  register_ganesha_uptime_metric;
   register_url_provider;
   release_log_facility;
   release_op_context;

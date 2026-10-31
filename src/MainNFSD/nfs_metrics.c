@@ -191,6 +191,25 @@ static const nfsstat4 index_to_nfsstat4[] = {
 	FOREACH_NFS_STAT4(DEFINE_INDEX_TO_STAT)
 };
 
+void register_ganesha_uptime_metric(void)
+{
+	const metric_label_t labels[] = {};
+
+	/*
+	 * Must be registered before prometheus_exposer__start(): the exposer
+	 * thread updates this gauge on every scrape. Scrapes during export /
+	 * FSAL init otherwise Set() a NULL handle and segfault.
+	 */
+	if (ganesha_uptime_info.metric != NULL)
+		return;
+
+	ganesha_uptime_info = monitoring__register_gauge(
+		"ganesha_uptime_seconds",
+		METRIC_METADATA("No.of minutes ganesha has been running",
+				METRIC_UNIT_SECOND),
+		labels, ARRAY_SIZE(labels));
+}
+
 void register_ganesha_info_metrics(const char *server_scope)
 {
 	const metric_label_t build_labels[] = {
@@ -198,7 +217,6 @@ void register_ganesha_info_metrics(const char *server_scope)
 		METRIC_LABEL("BUILT_TIME", __DATE__ " " __TIME__),
 		METRIC_LABEL("SERVER_SCOPE", server_scope)
 	};
-	const metric_label_t labels[] = {};
 
 	ganesha_build_info = monitoring__register_gauge(
 		"ganesha_build_info",
@@ -206,11 +224,7 @@ void register_ganesha_info_metrics(const char *server_scope)
 		build_labels, ARRAY_SIZE(build_labels));
 
 	monitoring__gauge_set(ganesha_build_info, 1);
-	ganesha_uptime_info = monitoring__register_gauge(
-		"ganesha_uptime_seconds",
-		METRIC_METADATA("No.of minutes ganesha has been running",
-				METRIC_UNIT_SECOND),
-		labels, ARRAY_SIZE(labels));
+	register_ganesha_uptime_metric();
 }
 static void register_nfsv4_operation_metrics(nfs_opnum4 opcode,
 					     enum nfsstat4_index statcode_index)
