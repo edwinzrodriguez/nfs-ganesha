@@ -402,7 +402,10 @@ void *PrometheusExposer::server_thread(void *arg)
 		elapsed_seconds =
 			(current_time.tv_sec - nfs_ServerBootTime.tv_sec);
 
-		monitoring__gauge_set(ganesha_uptime_info, elapsed_seconds);
+		/* Skip until register_ganesha_uptime_metric() has run. */
+		if (ganesha_uptime_info.metric != nullptr)
+			monitoring__gauge_set(ganesha_uptime_info,
+					      elapsed_seconds);
 	}
 	return NULL;
 }
