@@ -72,5 +72,6 @@ void nfs_metrics__nfs4_request(const uint32_t op,
 			       const export_id_t export_id, const char *path,
 			       const char *client_ip);
 
+void register_ganesha_uptime_metric(void);
 void register_ganesha_info_metrics(const char *server_scope);
 #endif /* !NFS_METRICS_H */
