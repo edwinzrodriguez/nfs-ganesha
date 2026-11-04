@@ -13,7 +13,8 @@ bytes land, so ObjectCacher can own them without `claim_iov` mid-UV juggling.
 | `xdr_ioq_fill_payload` | Alloc → copy buffered body → `readv` deferred remainder |
 | `svc_vc_set_payload_defer` | Stage only `hdr_stage_max` of a large LAST_FRAG |
 | `svc_vc_body_remain` / `svc_vc_readv_body` | Deferred body still on the socket |
-| `svc_vc_drain_body_remain` | Discard leftover body if decode did not fill |
+| `svc_vc_drain_body_remain` | Discard leftover body if decode did not fill;
+  returns false on I/O error so the xprt can be destroyed instead of desyncing |
 
 ## Flow
 
@@ -23,12 +24,15 @@ bytes land, so ObjectCacher can own them without `claim_iov` mid-UV juggling.
 3. Ganesha (Phase 2): `xdr_ioq_set_payload_alloc` then, after WRITE `data_len`,
    `xdr_ioq_fill_payload` instead of `XDR_FILLBUFS`.
 4. Callback returns Ceph pages + cookie; fill copies prefix, `readv`s the rest,
-   appends `UIO_FLAG_UPPER` UVs for deferred bytes so `SETPOS` works.
+   appends `UIO_FLAG_UPPER` UVs for deferred bytes so `SETPOS` works, then
+   pulls any trailing compound bytes (e.g. GETATTR after WRITE) into a FREE UV.
 5. FSAL passes the cookie/`bufferlist` to `ceph_ll_async_write` (no donate/claim).
 
 Without defer, fill still works: full body is copied from FREE UVs into upper
 pages (Ceph constraints satisfied; one memcpy). Donate/claim remains the
-fallback when alloc is unset or fill fails.
+fallback when alloc is **unset**. If alloc is registered and fill fails, do
+**not** fall back to FILLBUFS (deferred socket body is invisible to IOVCOUNT
+and the old `-1 → u_int` path desynced the stream).
 
 ## Phase 2 (Ganesha wiring)
 
