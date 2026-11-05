@@ -257,7 +257,11 @@ bool xdr_io_data(XDR *xdrs, io_data *objp);
 /**
  * Optional hook: FSAL registers so NFS core can enable upper-layer WRITE
  * payload allocation on the decode XDR before COMPOUND/WRITE decode.
- * Called once per request before SVCAUTH_CHECKSUM.
+ *
+ * Called:
+ * - at TCP accept with @p xdrs NULL (xprt-only: e.g. enable payload defer
+ *   before the first recv), and
+ * - once per request before SVCAUTH_CHECKSUM with a live decode XDR.
  */
 typedef void (*nfs_write_payload_setup_t)(XDR *xdrs, SVCXPRT *xprt);
 extern nfs_write_payload_setup_t nfs_write_payload_setup;

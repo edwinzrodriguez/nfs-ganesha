@@ -1874,7 +1874,14 @@ void ceph_write_payload_setup(XDR *xdrs, SVCXPRT *xprt)
 	    !CephFSM.fsal.fs_info.allocate_own_write_buffer)
 		return;
 
-	xdr_ioq_set_payload_alloc(xdrs, ceph_xdr_payload_alloc, NULL);
+	/*
+	 * xdrs == NULL: accept-time xprt-only setup (enable defer before any
+	 * recv). Defer must not be turned on mid-request after EPOLLIN was
+	 * already rearmed — that races a concurrent recv into body_remain
+	 * and can hang the worker in blocking drain.
+	 */
+	if (xdrs != NULL)
+		xdr_ioq_set_payload_alloc(xdrs, ceph_xdr_payload_alloc, NULL);
 	if (xprt != NULL)
 		svc_vc_set_payload_defer(xprt, true, 0);
 }

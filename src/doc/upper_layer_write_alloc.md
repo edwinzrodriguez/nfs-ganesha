@@ -18,9 +18,14 @@ bytes land, so ObjectCacher can own them without `claim_iov` mid-UV juggling.
 
 ## Flow
 
-1. Optional: `svc_vc_set_payload_defer(xprt, true, 0)` (default stage 256KiB).
+1. At TCP accept (and again per request): FSAL `nfs_write_payload_setup`
+   may call `svc_vc_set_payload_defer(xprt, true, 0)` (default stage 256KiB).
+   Defer **must** be enabled before the first recv — turning it on mid-request
+   after EPOLLIN was rearmed races a concurrent recv into `body_remain` and
+   can hang a worker in drain.
 2. Large LAST_FRAG: recv stages headers (+ payload prefix) into a FREE UV;
    remainder stays as `sx_body_remain` (EPOLLIN not rearmed until consumed).
+   Deferred `readv` uses a finite poll timeout; failure destroys the xprt.
 3. Ganesha (Phase 2): `xdr_ioq_set_payload_alloc` then, after WRITE `data_len`,
    `xdr_ioq_fill_payload` instead of `XDR_FILLBUFS`.
 4. Callback returns Ceph pages + cookie; fill copies prefix, `readv`s the rest,
