@@ -36,8 +36,12 @@
 
 /* Export */
 
-static struct config_item export_params[] = { CONF_ITEM_NOOP("name"),
-					      CONFIG_EOL };
+static struct config_item export_params[] = {
+	CONF_ITEM_NOOP("name"),
+	CONF_ITEM_UI32("IO_Busy_Delay_USec", 0, 10000000, 0, vfs_fsal_export,
+		       io_busy_delay_us),
+	CONFIG_EOL
+};
 
 static struct config_block export_param_block = {
 	.dbus_interface_name = "org.ganesha.nfsd.config.fsal.xfs-export%d",

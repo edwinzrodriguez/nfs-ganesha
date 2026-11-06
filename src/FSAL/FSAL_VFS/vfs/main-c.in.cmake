@@ -43,6 +43,7 @@
 #include "FSAL/fsal_init.h"
 #include "fsal_handle_syscalls.h"
 #include "vfs_methods.h"
+#include "vfs_stats.h"
 
 /* VFS FSAL module private storage
  */
@@ -89,7 +90,8 @@ static struct vfs_fsal_module VFS = {
 			.xattr_support = true,
 		}
 	},
-	.only_one_user = false
+	.only_one_user = false,
+	.io_busy_delay_us = 0
 };
 
 static struct config_item vfs_params[] = {
@@ -109,6 +111,8 @@ static struct config_item vfs_params[] = {
 	CONF_ITEM_BOOL("only_one_user", false, vfs_fsal_module, only_one_user),
 	CONF_ITEM_BOOL("named_attr", false, vfs_fsal_module,
 		       module.fs_info.named_attr),
+	CONF_ITEM_UI32("IO_Busy_Delay_USec", 0, 10000000, 0, vfs_fsal_module,
+		       io_busy_delay_us),
 	CONFIG_EOL
 };
 
@@ -182,6 +186,9 @@ static fsal_status_t init_config(struct fsal_module *vfs_fsal_module,
 	LogFullDebug(COMPONENT_FSAL,
 		     "Supported attributes default = 0x%" PRIx64,
 		     vfs_module->module.fs_info.supported_attrs);
+
+	(void)vfs_prepare_for_stats(vfs_fsal_module);
+
 	(void)load_config_from_parse(config_struct, &vfs_param, vfs_module,
 				     true, err_type);
 
@@ -193,6 +200,8 @@ static fsal_status_t init_config(struct fsal_module *vfs_fsal_module,
 	    !config_error_is_harmless(err_type))
 		return fsalstat(ERR_FSAL_INVAL, 0);
 
+	LogInfo(COMPONENT_FSAL, "FSAL_VFS IO_Busy_Delay_USec = %u",
+		vfs_module->io_busy_delay_us);
 	display_fsinfo(&vfs_module->module);
 	LogFullDebug(COMPONENT_FSAL,
 		     "Supported attributes constant = 0x%" PRIx64,
@@ -225,6 +234,10 @@ MODULE_INIT void vfs_init(void)
 	myself->m_ops.create_export = vfs_create_export;
 	myself->m_ops.update_export = vfs_update_export;
 	myself->m_ops.init_config = init_config;
+#ifdef USE_DBUS
+	myself->m_ops.fsal_extract_stats = vfs_fsal_extract_stats;
+#endif
+	myself->m_ops.fsal_reset_stats = vfs_fsal_reset_stats;
 
 	/* Initialize the fsal_obj_handle ops for FSAL VFS/LUSTRE */
 	vfs_handle_ops_init(&VFS.handle_ops);
