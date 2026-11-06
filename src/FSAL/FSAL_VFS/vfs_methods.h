@@ -36,6 +36,7 @@
 #include "FSAL/fsal_commonlib.h"
 #include "FSAL/fsal_localfs.h"
 #include "FSAL/access_check.h"
+#include "common_utils.h"
 
 struct vfs_fsal_obj_handle;
 struct vfs_fsal_export;
@@ -47,6 +48,8 @@ struct vfs_fsal_module {
 	struct fsal_module module;
 	struct fsal_obj_ops handle_ops;
 	bool only_one_user;
+	/** Busy-wait after I/O for this many microseconds (0 = off). */
+	uint32_t io_busy_delay_us;
 };
 
 /*
@@ -56,7 +59,46 @@ struct vfs_fsal_export {
 	struct fsal_export export;
 	int fsid_type;
 	bool async_hsm_restore;
+	/** Busy-wait after I/O for this many microseconds (0 = off).
+	 *  Set from EXPORT FSAL { IO_Busy_Delay_USec }, else inherited
+	 *  from the module-level XFS/VFS { IO_Busy_Delay_USec }.
+	 */
+	uint32_t io_busy_delay_us;
 };
+
+/**
+ * @brief Burn CPU for io_busy_delay_us after an I/O op (test/injection aid).
+ *
+ * Uses a tight CLOCK_MONOTONIC spin — not sleep — so the core stays busy.
+ * Prefer the per-export value; fall back to the module default.
+ */
+static inline void vfs_io_busy_delay(const struct fsal_module *fsal_module)
+{
+	struct vfs_fsal_module *mod =
+		container_of(fsal_module, struct vfs_fsal_module, module);
+	uint32_t delay_us = mod->io_busy_delay_us;
+	struct timespec start, cur;
+	nsecs_elapsed_t target_ns;
+
+	/* Under MDCACHE subcall, op_ctx->fsal_export is the VFS/XFS export. */
+	if (op_ctx != NULL && op_ctx->fsal_export != NULL &&
+	    op_ctx->fsal_export->fsal == fsal_module) {
+		struct vfs_fsal_export *exp = container_of(
+			op_ctx->fsal_export, struct vfs_fsal_export, export);
+
+		if (exp->io_busy_delay_us != 0)
+			delay_us = exp->io_busy_delay_us;
+	}
+
+	if (delay_us == 0)
+		return;
+
+	target_ns = (nsecs_elapsed_t)delay_us * 1000ULL;
+	now_mono(&start);
+	do {
+		now_mono(&cur);
+	} while (timespec_diff(&start, &cur) < target_ns);
+}
 
 #define EXPORT_VFS_FROM_FSAL(fsal) \
 	container_of((fsal), struct vfs_fsal_export, export)
