@@ -41,6 +41,7 @@
 #include "nfs_proto_functions.h"
 #include "nfs_proto_tools.h"
 #include "server_stats.h"
+#include "io_stages.h"
 #include "export_mgr.h"
 #include "nfs_creds.h"
 #include "pnfs_utils.h"
@@ -737,7 +738,24 @@ enum nfs_req_result complete_op(compound_data_t *data, nfsstat4 *status,
 
 out:
 
-	server_stats_nfsv4_op_done(data->opcode, &data->op_start_time, *status);
+	/* Terminal data ops: attribute e2e latency from request start.
+	 * Other ops keep short per-op windows from op_start_time.
+	 */
+	switch (data->opcode) {
+	case NFS4_OP_READ:
+	case NFS4_OP_WRITE:
+	case NFS4_OP_READ_PLUS:
+	case NFS4_OP_WRITE_SAME:
+		if (nfs_param.core_param.enable_FULLV4STATS && data->req)
+			data->req->rq_stats_opcode = (int32_t)data->opcode;
+		server_stats_nfsv4_op_done(data->opcode, &op_ctx->start_time,
+					   *status);
+		break;
+	default:
+		server_stats_nfsv4_op_done(data->opcode, &data->op_start_time,
+					   *status);
+		break;
+	}
 
 	return result;
 }
@@ -772,6 +790,24 @@ enum nfs_req_result process_one_op(compound_data_t *data, nfsstat4 *status)
 
 	LogDebug(COMPONENT_NFS_V4, "Request %d: opcode %d is %s", data->oppos,
 		 data->opcode, data->opname);
+
+	/* Stage timing: primary data ops only */
+	switch (data->opcode) {
+	case NFS4_OP_READ:
+	case NFS4_OP_WRITE:
+	case NFS4_OP_READ_PLUS:
+	case NFS4_OP_WRITE_SAME:
+	case NFS4_OP_COMMIT: {
+		nfs_request_t *reqdata =
+			container_of(data->req, nfs_request_t, svc);
+
+		reqdata->io_stages.primary_op = (uint16_t)data->opcode;
+		io_stage_stamp(&reqdata->io_stages, IO_STAGE_T06_PRIMARY_OP);
+		break;
+	}
+	default:
+		break;
+	}
 
 	/* Verify BIND_CONN_TO_SESSION is not used in a compound
 	 * with length > 1. This check is NOT redundant with the
@@ -825,8 +861,8 @@ enum nfs_req_result process_one_op(compound_data_t *data, nfsstat4 *status)
 		}
 	}
 
-	/* time each op */
-	now(&data->op_start_time);
+	/* Fine CLOCK_MONOTONIC; same clock as op_ctx->start_time / rq_stime */
+	now_mono(&data->op_start_time);
 
 	if (data->minorversion > 0 && data->session != NULL &&
 	    data->session->fore_channel_attrs.ca_maxoperations == data->oppos) {
@@ -939,6 +975,10 @@ void complete_nfs4_compound(compound_data_t *data, int status,
 			    enum nfs_req_result result)
 {
 	COMPOUND4res *res_compound4;
+	nfs_request_t *reqdata =
+		container_of(data->req, nfs_request_t, svc);
+
+	io_stage_stamp(&reqdata->io_stages, IO_STAGE_T09_COMPLETE_COMPOUND);
 
 	res_compound4 = &data->res->res_compound4_extended->res_compound4;
 
@@ -1198,6 +1238,8 @@ int nfs4_Compound(nfs_arg_t *arg, struct svc_req *req, nfs_res_t *res)
 	nfs_request_t *reqdata = container_of(req, nfs_request_t, svc);
 	struct COMPOUND4res *res_compound4;
 	enum nfs_req_result result = NFS_REQ_OK;
+
+	io_stage_stamp(&reqdata->io_stages, IO_STAGE_T05_COMPOUND);
 
 	/* Allocate (and zero) the COMPOUND4res_extended */
 	res->res_compound4_extended =

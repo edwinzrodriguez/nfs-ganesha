@@ -60,6 +60,7 @@
 #include "client_mgr.h"
 #include "export_mgr.h"
 #include "server_stats.h"
+#include "io_stages.h"
 #include "uid2grp.h"
 
 #include "gsh_lttng/gsh_lttng.h"
@@ -726,6 +727,11 @@ enum nfs_req_result complete_request(nfs_request_t *reqdata,
 	SVCXPRT *xprt = reqdata->svc.rq_xprt;
 	const nfs_function_desc_t *reqdesc = reqdata->funcdesc;
 
+	io_stage_stamp(&reqdata->io_stages, IO_STAGE_T10_COMPLETE_REQUEST);
+	/* Survive request free: ntirpc copies this onto the send ioq for T11 */
+	reqdata->svc.rq_stage_t10_ns =
+		reqdata->io_stages.ts_ns[IO_STAGE_T10_COMPLETE_REQUEST];
+
 	/* NFSv4 stats are handled in nfs4_compound() */
 	if (reqdata->svc.rq_msg.cb_prog != NFS_program[P_NFS] ||
 	    reqdata->svc.rq_msg.cb_vers != NFS_V4)
@@ -756,6 +762,27 @@ enum nfs_req_result complete_request(nfs_request_t *reqdata,
 	reqdata->svc.rq_msg.RPCM_ack.ar_results.where = reqdata->res_nfs;
 	reqdata->svc.rq_msg.RPCM_ack.ar_results.proc = reqdesc->xdr_encode_func;
 
+#ifdef _USE_NFS3
+	/* Stamp T3 / terminal opcode for reply-done (T4) when full stats on */
+	if (reqdata->svc.rq_msg.cb_prog == NFS_program[P_NFS] &&
+	    reqdata->svc.rq_msg.cb_vers == NFS_V3 &&
+	    nfs_param.core_param.enable_FULLV3STATS) {
+		uint32_t proc = reqdata->svc.rq_msg.cb_proc;
+
+		if (proc == NFSPROC3_READ || proc == NFSPROC3_WRITE)
+			reqdata->svc.rq_stats_opcode =
+				(int32_t)(proc | RQ_STATS_OPCODE_V3_FLAG);
+		if (reqdata->svc.rq_stats_opcode >= 0)
+			now_mono(&reqdata->svc.rq_reply_time);
+	} else
+#endif
+		if (reqdata->svc.rq_msg.cb_prog == NFS_program[P_NFS] &&
+		    reqdata->svc.rq_msg.cb_vers == NFS_V4 &&
+		    nfs_param.core_param.enable_FULLV4STATS &&
+		    reqdata->svc.rq_stats_opcode >= 0) {
+			now_mono(&reqdata->svc.rq_reply_time);
+		}
+
 	GSH_XPRT_AUTO_TRACEPOINT(nfs_rpc, before_reply, TRACE_INFO, xprt,
 				 "Before reply");
 
@@ -779,6 +806,8 @@ enum nfs_req_result complete_request(nfs_request_t *reqdata,
 
 	/* Finish any request not already deleted */
 	nfs_dupreq_finish(reqdata, rc);
+
+	server_stats_io_stages_done(reqdata);
 	return rc;
 }
 
@@ -876,6 +905,17 @@ static enum xprt_stat nfs_rpc_process_request(nfs_request_t *reqdata,
 	if (retry)
 		goto retry_after_drc_suspend;
 
+	/* Activate stage timing and capture early ntirpc stamps (T00–T02). */
+	io_stage_activate(&reqdata->io_stages);
+	io_stage_stamp_ns(&reqdata->io_stages, IO_STAGE_T00_EPOLL_READY,
+			  reqdata->svc.rq_stage_t00_ns);
+	io_stage_stamp_ns(&reqdata->io_stages, IO_STAGE_T01_SUBMIT,
+			  reqdata->svc.rq_stage_t01_ns);
+	io_stage_stamp_ns(&reqdata->io_stages, IO_STAGE_T02_TASK_RECV,
+			  reqdata->svc.rq_stage_t02_ns);
+	io_stage_stamp(&reqdata->io_stages, IO_STAGE_T03_SVC_REQUEST);
+	io_stage_stamp(&reqdata->io_stages, IO_STAGE_T04_PROCESS);
+
 	GSH_AUTO_TRACEPOINT(nfs_rpc, start, TRACE_INFO,
 			    "Rpc start. request: {}", reqdata);
 
@@ -913,6 +953,7 @@ static enum xprt_stat nfs_rpc_process_request(nfs_request_t *reqdata,
 	 * should be returned to the dispatcher.
 	 */
 	auth_rc = svc_auth_authenticate(&reqdata->svc, &no_dispatch);
+	io_stage_stamp(&reqdata->io_stages, IO_STAGE_T04B_AUTH_DONE);
 
 #ifdef USE_TLS
 	/* Handle AUTH_TLS probe specifically */
@@ -1066,10 +1107,14 @@ static enum xprt_stat nfs_rpc_process_request(nfs_request_t *reqdata,
 	export_check_access();
 
 	/* start the processing clock
-	 * we measure all time stats as intervals (elapsed nsecs) from
-	 * server boot time.  This gets high precision with simple 64 bit math.
+	 * Prefer ntirpc's early recv stamp (fine CLOCK_MONOTONIC via rq_stime)
+	 * so latency includes SVC_RECV/decode and matches now_mono() resolution.
+	 * Fall back to now_mono() if unset.
 	 */
-	now(&op_ctx->start_time);
+	if (reqdata->svc.rq_stime.tv_sec != 0)
+		op_ctx->start_time = reqdata->svc.rq_stime;
+	else
+		now_mono(&op_ctx->start_time);
 
 	/* Initialized user_credentials */
 	init_credentials();

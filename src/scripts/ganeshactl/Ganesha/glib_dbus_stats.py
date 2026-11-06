@@ -256,6 +256,11 @@ class RetrieveExportStats():
         stats_state = self.exportmgrobj.get_dbus_method("GetFULLV4Stats",
                                                         self.dbus_exportstats_name)
         return DumpFULLV4Stats(stats_state())
+    # I/O path stage timings
+    def iostages_stats(self):
+        stats_state = self.exportmgrobj.get_dbus_method("GetIOStageStats",
+                                                        self.dbus_exportstats_name)
+        return DumpIOStageStats(stats_state())
     # authentication
     def auth_stats(self):
         stats_state = self.exportmgrobj.get_dbus_method("GetAuthStats",
@@ -1712,7 +1717,8 @@ class StatsStatus(Report):
             'nfsv3',
             'nfsv4',
             'auth',
-            'client'
+            'client',
+            'iostages'
         ]
 
         for (i, status) in enumerate(self.result[2:]):
@@ -1761,6 +1767,11 @@ class StatsStatus(Report):
                 output += time.ctime(self.status[7][1][0]) + str(self.status[7][1][1]) + " nsecs\n"
             else:
                 output += "Stats counting of all ops for client is currently disabled \n"
+            if len(self.status) > 8 and self.status[8][0]:
+                output += "Stats counting for I/O stages is enabled since: \n\t"
+                output += time.ctime(self.status[8][1][0]) + str(self.status[8][1][1]) + " nsecs\n"
+            elif len(self.status) > 8:
+                output += "Stats counting for I/O stages is currently disabled \n"
             return output
 
 
@@ -1925,7 +1936,7 @@ class DumpFULLV3Stats(Report):
 
         for op_stats in self.result[3]:
             name = dbus_to_std(op_stats[0])
-            report[name] = {
+            entry = {
                 "details": {
                     "total": dbus_to_std(op_stats[1]),
                     "error": dbus_to_std(op_stats[2]),
@@ -1937,6 +1948,10 @@ class DumpFULLV3Stats(Report):
                     "max": dbus_to_std(op_stats[6])
                 }
             }
+            if len(op_stats) > 8:
+                entry["latency"]["e2e_average"] = dbus_to_std(op_stats[7])
+                entry["latency"]["send_average"] = dbus_to_std(op_stats[8])
+            report[name] = entry
 
     def __str__(self):
         output = ""
@@ -1953,7 +1968,7 @@ class DumpFULLV3Stats(Report):
             output += "Duration: " + "%.10f" % self.duration + " seconds\n"
             output += "\nOperation Details                         |  Operation Latency (in milliseconds)"
             output += "\n==========================================|========================================"
-            output += "\nName            Total     Error      Dups |       Avg          Min           Max   "
+            output += "\nName            Total     Error      Dups |       Avg          Min           Max        E2E       Send"
             i = 0
             tot_len = len(self.stats[3])
             while i < tot_len:
@@ -1964,6 +1979,9 @@ class DumpFULLV3Stats(Report):
                 output += " %12.6f" % (self.stats[3][i][4])
                 output += " %12.6f" % (self.stats[3][i][5])
                 output += " %12.6f" % (self.stats[3][i][6])
+                if len(self.stats[3][i]) > 8:
+                    output += " %12.6f" % (self.stats[3][i][7])
+                    output += " %12.6f" % (self.stats[3][i][8])
                 i += 1
             return output
 
@@ -1980,7 +1998,7 @@ class DumpFULLV4Stats(Report):
 
         for op_stats in self.result[3]:
             name = dbus_to_std(op_stats[0])
-            report[name] = {
+            entry = {
                 "details": {
                     "total": dbus_to_std(op_stats[1]),
                     "error": dbus_to_std(op_stats[2]),
@@ -1991,6 +2009,10 @@ class DumpFULLV4Stats(Report):
                     "max": dbus_to_std(op_stats[5])
                 }
             }
+            if len(op_stats) > 7:
+                entry["latency"]["e2e_average"] = dbus_to_std(op_stats[6])
+                entry["latency"]["send_average"] = dbus_to_std(op_stats[7])
+            report[name] = entry
 
     def __str__(self):
         output = ""
@@ -2007,7 +2029,7 @@ class DumpFULLV4Stats(Report):
             output += "Duration: " + "%.10f" % self.duration + " seconds\n"
             output += "\nOperation Details                            |  Operation Latency (in milliseconds)"
             output += "\n=============================================|========================================"
-            output += "\nName                        Total     Error  |       Avg          Min           Max   "
+            output += "\nName                        Total     Error  |       Avg          Min           Max        E2E       Send"
             i = 0
             tot_len = len(self.stats[3])
             while i < tot_len:
@@ -2017,8 +2039,12 @@ class DumpFULLV4Stats(Report):
                 output += " %12.6f" % (self.stats[3][i][3])
                 output += " %12.6f" % (self.stats[3][i][4])
                 output += " %12.6f" % (self.stats[3][i][5])
+                if len(self.stats[3][i]) > 7:
+                    output += " %12.6f" % (self.stats[3][i][6])
+                    output += " %12.6f" % (self.stats[3][i][7])
                 i += 1
             return output
+
 
 class RetrieveMemoryStats():
     def __init__(self):
@@ -2276,4 +2302,46 @@ class DumpMemStats(Report):
                 ]
             )
 
+        return output
+
+
+class DumpIOStageStats(Report):
+    def __init__(self, status):
+        super().__init__(status)
+        self.curtime = time.time()
+        self.stats = status
+
+    def fill_report(self, report):
+        if self.result[4] == 'None':
+            return
+
+        report["stages"] = {}
+        for stage in self.result[3]:
+            name = dbus_to_std(stage[0])
+            report["stages"][name] = {
+                "count": dbus_to_std(stage[1]),
+                "avg_us": dbus_to_std(stage[2]),
+                "min_us": dbus_to_std(stage[3]),
+                "max_us": dbus_to_std(stage[4]),
+            }
+
+    def __str__(self):
+        output = ""
+        if not self.stats[0]:
+            return "Unable to fetch I/O stage stats - " + self.stats[1]
+        if self.stats[4] != "OK":
+            return "\n No I/O stage stats available for display"
+        self.starttime = self.stats[2][0] + self.stats[2][1] / 1e9
+        self.duration = self.curtime - self.starttime
+        output += "I/O path stage timings (microseconds)\n"
+        output += "Stats collected since: " + time.ctime(self.stats[2][0]) + str(self.stats[2][1]) + " nsecs\n"
+        output += "Duration: " + "%.10f" % self.duration + " seconds\n"
+        output += "\nName                             Count |          Avg          Min          Max"
+        output += "\n=======================================|========================================"
+        for stage in self.stats[3]:
+            output += "\n" + str(stage[0]).ljust(32)
+            output += " %s  |" % (str(stage[1]).rjust(9))
+            output += " %12.3f" % (stage[2])
+            output += " %12.3f" % (stage[3])
+            output += " %12.3f" % (stage[4])
         return output
