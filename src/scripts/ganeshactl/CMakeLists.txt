@@ -69,11 +69,13 @@ if(Python3_FOUND)
   set(SETUP_PY    "${CMAKE_CURRENT_BINARY_DIR}/setup.py")
   set(OUTPUT      "${CMAKE_CURRENT_BINARY_DIR}/build/ganeshactl_timestamp")
 
-  # Generate rules for compiling .ui -> .py
-  set(GANESHA_SRCS)
+  # Always depend on the Ganesha package modules (stats, mgr, etc.).
+  # Previously these were only listed when USE_GUI_ADMIN_TOOLS was ON, so
+  # edits to e.g. glib_dbus_stats.py never rebuilt the wheel and ninja
+  # install kept reinstalling a stale ganeshactl-*.whl.
+  set(GANESHA_SRCS ${GANESHA_BASE_SRCS})
   set(UI_PY_FILES)
   if(USE_GUI_ADMIN_TOOLS)
-    set(GANESHA_SRCS ${GANESHA_BASE_SRCS})
     foreach(ui_file ${UI_SRC})
       string(REPLACE ".ui" ".py" py_file ${ui_file})
       add_custom_command(
@@ -136,19 +138,23 @@ if(Python3_FOUND)
 
   configure_file(${SETUP_PY_IN} ${SETUP_PY})
 
+  # Include SETUP_PY so a GANESHA_VERSION bump rebuilds the wheel; otherwise
+  # install looks for ganeshactl-<newver>-*.whl while dist still has the old one.
   if(USE_LEGACY_PYTHON_INSTALL)
     add_custom_command(
       OUTPUT ${OUTPUT}
       COMMAND ${Python3_EXECUTABLE} "${SETUP_PY}"  build
       COMMAND ${CMAKE_COMMAND} -E touch ${OUTPUT}
-      DEPENDS ${GANESHA_SRCS} ${UI_PY_FILES} ${SCRIPTS}
+      DEPENDS ${SETUP_PY} ${GANESHA_SRCS} ${UI_PY_FILES} ${SCRIPTS}
       )
   else()
     add_custom_command(
       OUTPUT ${OUTPUT}
+      COMMAND ${CMAKE_COMMAND} -E rm -rf
+              "${CMAKE_CURRENT_BINARY_DIR}/dist"
       COMMAND ${Python3_EXECUTABLE}  -m build --wheel --no-isolation .
       COMMAND ${CMAKE_COMMAND} -E touch ${OUTPUT}
-      DEPENDS ${GANESHA_SRCS} ${UI_PY_FILES} ${SCRIPTS}
+      DEPENDS ${SETUP_PY} ${GANESHA_SRCS} ${UI_PY_FILES} ${SCRIPTS}
       )
   endif()
 
@@ -161,10 +167,27 @@ if(Python3_FOUND)
         COMMAND ${Python3_EXECUTABLE} ${SETUP_PY} install --skip-build --no-compile --prefix=\$ENV{DESTDIR}${CMAKE_INSTALL_PREFIX})"
       )
   else()
+    # python -m installer refuses to overwrite; remove prior install first
+    set(_ganeshactl_site
+      "${CMAKE_INSTALL_PREFIX}/lib/python${Python3_VERSION_MAJOR}.${Python3_VERSION_MINOR}/site-packages")
+    set(_ganeshactl_wheel
+      "dist/ganeshactl-${GANESHA_MAJOR_VERSION}${GANESHA_MINOR_VERSION}-py3-none-any.whl")
     install(
       CODE
-      "execute_process(WORKING_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}
-        COMMAND ${Python3_EXECUTABLE} -m installer --destdir \$ENV{DESTDIR} dist/ganeshactl-${GANESHA_MAJOR_VERSION}${GANESHA_MINOR_VERSION}-py3-none-any.whl)"
+      "set(_dest \"\$ENV{DESTDIR}\")
+       set(_site \"\${_dest}${_ganeshactl_site}\")
+       set(_bindir \"\${_dest}${CMAKE_INSTALL_PREFIX}/bin\")
+       file(GLOB _distinfo \"\${_site}/ganeshactl-*.dist-info\")
+       file(REMOVE_RECURSE \"\${_site}/Ganesha\" \${_distinfo})
+       foreach(_s IN ITEMS fake_recall get_clientids grace_period ganesha_mgr ganesha_stats ganesha_conf ganesha_logrotate_mgr ganeshactl ganesha-admin manage_clients manage_logger manage_exports client_stats_9pOps export_stats_9pOps)
+         file(REMOVE \"\${_bindir}/\${_s}\")
+       endforeach()
+       execute_process(WORKING_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}
+         COMMAND ${Python3_EXECUTABLE} -m installer --destdir=\${_dest}/ --prefix=${CMAKE_INSTALL_PREFIX} ${_ganeshactl_wheel}
+         RESULT_VARIABLE _rc)
+       if(NOT _rc EQUAL 0)
+         message(FATAL_ERROR \"Failed to install ${_ganeshactl_wheel}\")
+       endif()"
       )
   endif()
 endif(Python3_FOUND)

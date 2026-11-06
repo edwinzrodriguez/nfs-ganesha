@@ -55,19 +55,25 @@ if(USE_ADMIN_TOOLS)
 
     configure_file(${SETUP_PY_IN} ${SETUP_PY})
 
+    # DEPENDS must use GANESHA_TOP_SRC (not the misspelled GANESHA_TOP_SRCS)
+    # and SETUP_PY so a version bump (configure_file) rebuilds the wheel.
+    # Without SETUP_PY, ninja keeps a stale ganesha_top-*-py3-none-any.whl
+    # while install looks for the new version and fails.
     if(USE_LEGACY_PYTHON_INSTALL)
       add_custom_command(
         OUTPUT ${OUTPUT}
         COMMAND ${Python3_EXECUTABLE} "${SETUP_PY}"  build
         COMMAND ${CMAKE_COMMAND} -E touch ${OUTPUT}
-        DEPENDS ${GANESHA_TOP_SRCS} ${SCRIPTS}
+        DEPENDS ${SETUP_PY} ${GANESHA_TOP_SRC} ${SCRIPTS}
         )
     else()
       add_custom_command(
         OUTPUT ${OUTPUT}
+        COMMAND ${CMAKE_COMMAND} -E rm -rf
+                "${CMAKE_CURRENT_BINARY_DIR}/dist"
         COMMAND ${Python3_EXECUTABLE}  -m build --wheel --no-isolation .
         COMMAND ${CMAKE_COMMAND} -E touch ${OUTPUT}
-        DEPENDS ${GANESHA_TOP_SRCS} ${SCRIPTS}
+        DEPENDS ${SETUP_PY} ${GANESHA_TOP_SRC} ${SCRIPTS}
         )
     endif()
 
@@ -80,10 +86,25 @@ if(USE_ADMIN_TOOLS)
         COMMAND ${Python3_EXECUTABLE} ${SETUP_PY} install --skip-build --no-compile --prefix=\$ENV{DESTDIR}${CMAKE_INSTALL_PREFIX})"
         )
     else()
+      # python -m installer refuses to overwrite; remove prior install first
+      set(_ganesha_top_site
+        "${CMAKE_INSTALL_PREFIX}/lib/python${Python3_VERSION_MAJOR}.${Python3_VERSION_MINOR}/site-packages")
+      set(_ganesha_top_wheel
+        "dist/ganesha_top-${GANESHA_MAJOR_VERSION}${GANESHA_MINOR_VERSION}-py3-none-any.whl")
       install(
         CODE
-        "execute_process(WORKING_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}
-        COMMAND ${Python3_EXECUTABLE} -m installer --destdir \$ENV{DESTDIR} dist/ganesha_top-${GANESHA_MAJOR_VERSION}${GANESHA_MINOR_VERSION}-py3-none-any.whl)"
+        "set(_dest \"\$ENV{DESTDIR}\")
+         set(_site \"\${_dest}${_ganesha_top_site}\")
+         set(_bindir \"\${_dest}${CMAKE_INSTALL_PREFIX}/bin\")
+         file(GLOB _distinfo \"\${_site}/ganesha_top-*.dist-info\")
+         file(REMOVE_RECURSE \${_distinfo})
+         file(REMOVE \"\${_bindir}/ganesha-top\")
+         execute_process(WORKING_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}
+           COMMAND ${Python3_EXECUTABLE} -m installer --destdir=\${_dest}/ --prefix=${CMAKE_INSTALL_PREFIX} ${_ganesha_top_wheel}
+           RESULT_VARIABLE _rc)
+         if(NOT _rc EQUAL 0)
+           message(FATAL_ERROR \"Failed to install ${_ganesha_top_wheel}\")
+         endif()"
         )
     endif()
   endif(Python3_FOUND)
