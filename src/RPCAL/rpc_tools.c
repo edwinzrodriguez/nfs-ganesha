@@ -56,6 +56,9 @@
 #include "nfs_exports.h"
 #include "nfs_file_handle.h"
 #include "nfs_dupreq.h"
+#include <rpc/xdr_ioq.h>
+
+nfs_write_payload_setup_t nfs_write_payload_setup;
 
 /* XXX doesn't ntirpc have an equivalent for all of the following?
  */
@@ -326,10 +329,65 @@ static inline bool xdr_io_data_decode(XDR *xdrs, io_data *objp)
 	/* For rdma_reads data received separately, so get data buffer */
 	start = XDR_GETSTARTDATAPOS(xdrs, start, objp->data_len);
 
+	/*
+	 * Phase 2 upper-layer WRITE: FSAL-registered payload_alloc fills
+	 * Ceph (or other) pages via xdr_ioq_fill_payload. Do not fall back
+	 * to FILLBUFS when alloc is registered: deferred body lives on the
+	 * socket, IOVCOUNT returns -1, and casting that to u_int (≈2^32-1)
+	 * takes the "bypassing zero-copy" opaque path which cannot see the
+	 * deferred bytes and desyncs the stream.
+	 */
+	if (xdr_ioq_has_payload_alloc(xdrs)) {
+		struct iovec *iov = NULL;
+		int iovcnt = 0;
+		void *cookie = NULL;
+		void (*release)(void *) = NULL;
+
+		if (!xdr_ioq_fill_payload(xdrs, start, objp->data_len, &iov,
+					  &iovcnt, &cookie, &release)) {
+			LogInfo(COMPONENT_DISPATCH,
+				"fill_payload failed for data_len=%u (no FILLBUFS fallback)",
+				objp->data_len);
+			return false;
+		}
+
+		objp->iov = iov;
+		objp->iovcnt = (u_int)iovcnt;
+		objp->release = release;
+		objp->release_data = cookie;
+
+		if (!XDR_SETPOS(xdrs,
+				XDR_GETENDDATAPOS(xdrs, start,
+						  RNDUP(objp->data_len)))) {
+			LogInfo(COMPONENT_DISPATCH,
+				"SETPOS after fill_payload failed data_len=%u start=%u",
+				objp->data_len, start);
+			if (release != NULL)
+				release(cookie);
+			objp->iov = NULL;
+			objp->release = NULL;
+			objp->release_data = NULL;
+			return false;
+		}
+
+		LogFullDebug(COMPONENT_DISPATCH,
+			     "fill_payload iovcnt=%d data_len=%u cookie=%p",
+			     iovcnt, objp->data_len, cookie);
+		return true;
+	}
+
 	/* Find out how many buffers the data occupies */
 	objp->iovcnt = XDR_IOVCOUNT(xdrs, start, objp->data_len);
 
 	LogFullDebug(COMPONENT_DISPATCH, "iovcnt = %u", objp->iovcnt);
+
+	/* IOVCOUNT returns -1 when the stream is short (e.g. deferred body). */
+	if ((int)objp->iovcnt <= 0) {
+		LogInfo(COMPONENT_DISPATCH,
+			"io_data iovcnt %d for data_len %u (not enough buffered body)",
+			(int)objp->iovcnt, objp->data_len);
+		return false;
+	}
 
 	if (objp->iovcnt > IOV_MAX) {
 		char *buf;

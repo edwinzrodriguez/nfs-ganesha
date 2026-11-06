@@ -107,6 +107,11 @@ struct ceph_fsal_module
 #else
 				    .allocate_own_read_buffer = false,
 #endif
+#ifdef USE_FSAL_CEPH_FS_ALLOC_IO
+				    .allocate_own_write_buffer = true,
+#else
+				    .allocate_own_write_buffer = false,
+#endif
 				    .expire_time_parent = -1,
 				    .readdir_mode = FSAL_RDDIR_CHUNK_NEVER,
 			    } } };
@@ -268,10 +273,27 @@ static int ceph_conf_commit(void *node, void *link_mem, void *self_struct,
 	struct ceph_fsal_module *CephFSM = self_struct;
 
 	if (CephFSM->client_oc && CephFSM->zerocopy) {
+		/*
+		 * ZeroCopyClient routes through ObjectCacher when client_oc is on.
+		 * Unencrypted OC dirty requires Allocated (upper-layer)
+		 * bufferlists — claim/wrap stay Filer-only. Refuse the combo
+		 * when this build lacks ceph_bufferlist_alloc / WRITE alloc.
+		 */
+#ifndef USE_FSAL_CEPH_FS_ALLOC_IO
 		LogWarn(COMPONENT_FSAL,
-			"client_oc and zerocopy are incompatible");
+			"client_oc and zerocopy require libcephfs upper-layer "
+			"WRITE alloc (ceph_bufferlist_alloc)");
 		err_type->invalid = true;
 		return 1;
+#else
+		if (!CephFSM->fsal.fs_info.allocate_own_write_buffer) {
+			LogWarn(COMPONENT_FSAL,
+				"client_oc and zerocopy require "
+				"allocate_own_write_buffer");
+			err_type->invalid = true;
+			return 1;
+		}
+#endif
 	}
 	if (CephFSM->clnts_per_pool == 0) {
 		LogWarn(COMPONENT_FSAL,
@@ -1575,6 +1597,11 @@ MODULE_INIT void init(void)
 
 	/* Initialize the fsal_obj_handle ops for FSAL CEPH */
 	handle_ops_init(&CephFSM.handle_ops);
+
+#ifdef USE_FSAL_CEPH_FS_ALLOC_IO
+	/* Enable upper-layer WRITE alloc on decode when ZC+ALLOC_IO built. */
+	nfs_write_payload_setup = ceph_write_payload_setup;
+#endif
 }
 
 /**
@@ -1588,6 +1615,10 @@ MODULE_INIT void init(void)
 MODULE_FINI void finish(void)
 {
 	LogDebug(COMPONENT_FSAL, "Ceph module finishing.");
+
+#ifdef USE_FSAL_CEPH_FS_ALLOC_IO
+	nfs_write_payload_setup = NULL;
+#endif
 
 	if (unregister_fsal(&CephFSM.fsal) != 0) {
 		LogCrit(COMPONENT_FSAL,
