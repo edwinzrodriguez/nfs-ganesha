@@ -47,10 +47,11 @@ To display stat counters use:
   {progname} [list_clients | deleg <ip address>
               inode | iov3 [export id] | iov4 [export id] | iov41 [export id] | iov42 [export id] |
               iomon [export id] | export | total [export id] | fast | pnfs [export id] |
-              fsal <fsal name> | v3_full | v4_full | iostages | auth |
+              fsal <fsal name> | v3_full | v4_full | iostages | socket_zc | auth |
               client_io_ops <ip address | all> | export_details <export id> |
               client_all_ops <ip address | all> | mem_stats <show | status>]
   fsal name is the registered FSAL module name (e.g. GPFS, Ceph).
+  socket_zc shows MSG_ZEROCOPY counters (sends, completions, copied, …).
 
 To display stat counters in json format use:
   {progname} json <command>
@@ -92,8 +93,8 @@ commands = (
     'help', 'list_clients', 'deleg', 'global', 'inode', 'iov3', 'iov4',
     'iov41', 'iov42', 'iomon', 'export', 'total', 'fast', 'pnfs', 'fsal',
     'reset', 'enable', 'disable', 'status', 'v3_full', 'v4_full', 'iostages',
-    'auth', 'client_io_ops', 'export_details', 'client_all_ops', 'json',
-    'mem_stats'
+    'socket_zc', 'auth', 'client_io_ops', 'export_details', 'client_all_ops',
+    'json', 'mem_stats'
 )
 
 if command not in commands:
@@ -211,6 +212,8 @@ try:
         result = exp_interface.v4_full_stats()
     elif command == "iostages":
         result = exp_interface.iostages_stats()
+    elif command == "socket_zc":
+        result = exp_interface.socket_zc_stats()
     elif command == "auth":
         result = exp_interface.auth_stats()
     elif command == "enable":
