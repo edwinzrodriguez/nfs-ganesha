@@ -32,9 +32,17 @@ SET(fsalxfs_LIB_SRCS
    ../xattrs.c
    ../state.c
    ../vfs_methods.h
+   ../fsal_stats_vfs.c
+   ../vfs_stats.h
    ../empty_check_hsm.c
    subfsal_xfs.c
   )
+
+if(USE_DBUS)
+  include_directories(
+    ${DBUS_INCLUDE_DIRS}
+  )
+endif(USE_DBUS)
 
 add_library(fsalxfs MODULE ${fsalxfs_LIB_SRCS})
 add_sanitizers(fsalxfs)

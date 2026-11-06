@@ -55,6 +55,8 @@ static struct config_item export_params[] = {
 			fsid_type),
 	CONF_ITEM_BOOL("async_hsm_restore", true, vfs_fsal_export,
 		       async_hsm_restore),
+	CONF_ITEM_UI32("IO_Busy_Delay_USec", 0, 10000000, 0, vfs_fsal_export,
+		       io_busy_delay_us),
 	CONFIG_EOL
 };
 
