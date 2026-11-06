@@ -519,6 +519,13 @@ static enum xprt_stat nfs_rpc_dispatch_tcp_NFS(SVCXPRT *xprt)
 
 	connection_manager__connection_init(xprt);
 
+	/*
+	 * FSAL may enable VC payload defer on this xprt before any recv so a
+	 * large LAST_FRAG never rearms EPOLLIN under an in-flight svc_request.
+	 */
+	if (nfs_write_payload_setup != NULL)
+		nfs_write_payload_setup(NULL, xprt);
+
 	xprt->xp_dispatch.process_cb = nfs_rpc_valid_NFS;
 	xprt->xp_dispatch.remote_addr_set_cb =
 		nfs_rpc_dispatch_remote_addr_set_tcp;
