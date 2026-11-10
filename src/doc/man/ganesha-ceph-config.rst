@@ -77,7 +77,11 @@ async(bool, default false)
     Enable ceph async operations (read and write).
 
 zerocopy(bool, default false)
-    Enable ceph zero copy I/O. Zero copy and client_oc are incompatible.
+    Enable ceph zero-copy I/O (ceph_ll_async_* / bufferlist ownership).
+    May be combined with client_oc when libcephfs routes ZeroCopyClient
+    through ObjectCacher and this build has upper-layer WRITE alloc
+    (ceph_bufferlist_alloc). With client_oc, WRITE must use upper-layer
+    alloc; claim/wrap fallbacks are Filer-only and rejected.
 
 use_old_uuid(bool, default false)
     Use old uuid logic for ceph client. Useful when upgrading from pre 7.0

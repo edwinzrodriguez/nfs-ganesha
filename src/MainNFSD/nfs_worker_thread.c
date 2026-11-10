@@ -1080,6 +1080,13 @@ static enum xprt_stat nfs_rpc_process_request(nfs_request_t *reqdata,
 	reqdata->svc.rq_msg.rm_xdr.proc = reqdesc->xdr_decode_func;
 	xdrs->x_public = &reqdata->lookahead;
 
+	/*
+	 * Phase 2: allow FSAL to register upper-layer WRITE payload alloc
+	 * before COMPOUND/WRITE decode (export not known yet for NFSv4).
+	 */
+	if (nfs_write_payload_setup != NULL)
+		nfs_write_payload_setup(xdrs, xprt);
+
 	if (!SVCAUTH_CHECKSUM(&reqdata->svc)) {
 		LogInfo(COMPONENT_DISPATCH,
 			"SVCAUTH_CHECKSUM failed for Program %" PRIu32
