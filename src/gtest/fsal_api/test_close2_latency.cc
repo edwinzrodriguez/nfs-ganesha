@@ -271,8 +271,8 @@ int main(int argc, char *argv[])
 				   "log to the provided file path");
 		opts.add_options()(
 			    "export", po::value<uint16_t>(),
-			    "id of export on which to operate (must exist)")
-			opts.add_options()("debug", po::value<string>(),
+			    "id of export on which to operate (must exist)");
+		opts.add_options()("debug", po::value<string>(),
 					   "ganesha debug level");
 		opts.add_options()("session", po::value<string>(),
 				   "LTTng session name");
